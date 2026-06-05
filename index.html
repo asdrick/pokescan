@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#d92435">
+  <meta name="theme-color" content="#050812">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="PokéCollection">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>PokéCollection Free</title>
+  <meta name="apple-mobile-web-app-title" content="PokéScan">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>PokéScan Collection</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./icon.svg">
@@ -19,34 +19,28 @@
       <div class="brand">
         <div class="brand-mark" aria-hidden="true"></div>
         <div>
-          <strong>PokéCollection</strong>
-          <span>Free</span>
+          <strong>PokéScan</strong>
+          <span>Collection OS</span>
         </div>
       </div>
 
       <nav class="nav">
-        <button class="nav-item active" data-view="dashboard" title="Tableau de bord">
-          <span class="icon">⌂</span><span>Accueil</span>
-        </button>
-        <button class="nav-item" data-view="scanner" title="Scanner">
-          <span class="icon">◉</span><span>Scanner</span>
-        </button>
-        <button class="nav-item" data-view="collection" title="Collection">
-          <span class="icon">▦</span><span>Collection</span>
-        </button>
-        <button class="nav-item" data-view="sets" title="Séries">
-          <span class="icon">◎</span><span>Séries</span>
-        </button>
-        <button class="nav-item" data-view="wishlist" title="Wishlist">
-          <span class="icon">☆</span><span>Wishlist</span>
-        </button>
-        <button class="nav-item" data-view="graded" title="Cartes gradées">
-          <span class="icon">◇</span><span>Gradées</span>
-        </button>
+        <button class="nav-item active" data-view="dashboard" type="button"><span>⌂</span>Accueil</button>
+        <button class="nav-item" data-view="scanner" type="button"><span>◉</span>Scan</button>
+        <button class="nav-item" data-view="database" type="button"><span>⌕</span>Base cartes</button>
+        <button class="nav-item" data-view="collection" type="button"><span>▦</span>Collection</button>
+        <button class="nav-item" data-view="sets" type="button"><span>◎</span>Séries</button>
+        <button class="nav-item" data-view="wishlist" type="button"><span>☆</span>Wishlist</button>
+        <button class="nav-item" data-view="graded" type="button"><span>◇</span>Gradées</button>
       </nav>
 
+      <div class="api-status" id="apiStatus">
+        <span class="pulse"></span>
+        API en attente
+      </div>
+
       <div class="sidebar-actions">
-        <button id="themeToggle" class="ghost-button" type="button">Mode sombre</button>
+        <button id="themeToggle" class="ghost-button" type="button">Mode clair</button>
         <button id="printExport" class="ghost-button" type="button">Export PDF</button>
       </div>
     </aside>
@@ -54,13 +48,13 @@
     <main class="content">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Application locale</p>
+          <p class="eyebrow">Pokémon TCG API + collection locale</p>
           <h1 id="viewTitle">Tableau de bord</h1>
         </div>
         <div class="top-actions">
           <label class="search-box">
             <span>⌕</span>
-            <input id="globalSearch" type="search" placeholder="Rechercher une carte">
+            <input id="globalSearch" type="search" placeholder="Rechercher dans ta collection">
           </label>
           <button class="primary-button" data-view-jump="scanner" type="button">Scanner</button>
         </div>
@@ -69,43 +63,29 @@
       <section id="dashboard" class="view active-view">
         <div class="hero-panel">
           <div class="hero-copy">
-            <p class="eyebrow">Collection active</p>
-            <h2>Suivi, valeur et progression en un seul écran.</h2>
-            <p>Ajoutez vos cartes, notez leur état, surveillez vos séries et préparez vos échanges.</p>
+            <p class="eyebrow">Collection augmentée</p>
+            <h2>Scan caméra, prix marché, séries et cartes dans une interface plus avancée.</h2>
+            <p>Les prix viennent des champs TCGPlayer/Cardmarket disponibles dans Pokémon TCG API. Quand une carte n’a pas de prix, l’app l’indique au lieu d’inventer une valeur.</p>
           </div>
-          <div class="hero-card-stack" aria-hidden="true">
-            <div class="sample-card card-red"></div>
-            <div class="sample-card card-blue"></div>
-            <div class="sample-card card-gold"></div>
+          <div class="holo-card" aria-hidden="true">
+            <div class="holo-inner"></div>
           </div>
         </div>
 
         <div class="metric-grid">
-          <article class="metric">
-            <span>Total cartes</span>
-            <strong id="metricTotal">0</strong>
-          </article>
-          <article class="metric">
-            <span>Valeur estimée</span>
-            <strong id="metricValue">0 €</strong>
-          </article>
-          <article class="metric">
-            <span>Doublons</span>
-            <strong id="metricDuplicates">0</strong>
-          </article>
-          <article class="metric">
-            <span>Progression moyenne</span>
-            <strong id="metricProgress">0%</strong>
-          </article>
+          <article class="metric"><span>Total cartes</span><strong id="metricTotal">0</strong></article>
+          <article class="metric"><span>Valeur estimée</span><strong id="metricValue">0 €</strong></article>
+          <article class="metric"><span>Doublons</span><strong id="metricDuplicates">0</strong></article>
+          <article class="metric"><span>Séries API</span><strong id="metricSets">0</strong></article>
         </div>
 
         <div class="two-column">
           <section class="panel">
             <div class="panel-heading">
-              <h3>Évolution de valeur</h3>
-              <span>30 derniers jours</span>
+              <h3>Signal valeur</h3>
+              <span>Collection locale</span>
             </div>
-            <div id="valueChart" class="bar-chart" aria-label="Graphique de valeur"></div>
+            <div id="valueChart" class="bar-chart"></div>
           </section>
           <section class="panel">
             <div class="panel-heading">
@@ -118,68 +98,78 @@
       </section>
 
       <section id="scanner" class="view">
-        <div class="scanner-layout">
-          <section class="panel scanner-panel">
-            <div class="panel-heading">
-              <h3>Scanner intelligent</h3>
-              <span>Vision + OCR simulés</span>
+        <div class="scanner-grid">
+          <section class="scanner-stage">
+            <div class="scanner-toolbar">
+              <button id="startCamera" class="primary-button" type="button">Démarrer caméra</button>
+              <button id="captureScan" class="ghost-button" type="button">Capturer</button>
+              <label class="ghost-button file-button">
+                Importer photo
+                <input id="cardImage" type="file" accept="image/*">
+              </label>
             </div>
-            <label class="dropzone" for="cardImage">
-              <input id="cardImage" type="file" accept="image/*">
-              <span class="scan-icon">◉</span>
-              <strong>Importer une photo de carte</strong>
-              <small>La reconnaissance est simulée pour cette première version locale.</small>
-            </label>
-            <div id="scanPreview" class="scan-preview hidden"></div>
-            <button id="analyzeScan" class="primary-button wide" type="button">Analyser la carte</button>
+            <div class="camera-frame">
+              <video id="cameraVideo" playsinline muted></video>
+              <canvas id="captureCanvas" class="hidden"></canvas>
+              <img id="scanPhoto" class="hidden" alt="Carte capturée">
+              <div class="scan-reticle">
+                <span></span><span></span><span></span><span></span>
+                <strong>Place la carte ici</strong>
+              </div>
+            </div>
           </section>
 
           <section class="panel">
             <div class="panel-heading">
-              <h3>Résultat</h3>
-              <span id="scanConfidence">En attente</span>
+              <h3>Reconnaissance</h3>
+              <span id="scanConfidence">Prêt</span>
+            </div>
+            <div class="scan-search">
+              <input id="scanQuery" placeholder="Nom lu ou à chercher, ex: Charizard ex">
+              <button id="analyzeScan" class="primary-button" type="button">Identifier</button>
             </div>
             <div id="scanResult" class="scan-result empty-state">
-              Importez une image puis lancez l’analyse.
+              Lance la caméra, cadre la carte, capture, puis identifie-la.
             </div>
           </section>
         </div>
       </section>
 
+      <section id="database" class="view">
+        <section class="panel">
+          <div class="panel-heading">
+            <h3>Base cartes Pokémon</h3>
+            <span id="dbCount">Recherche API</span>
+          </div>
+          <div class="database-tools">
+            <input id="apiSearch" placeholder="Nom, série ou numéro">
+            <select id="apiSetFilter"><option value="">Toutes les séries</option></select>
+            <button id="apiSearchButton" class="primary-button" type="button">Chercher</button>
+            <button id="loadMoreCards" class="ghost-button" type="button">Plus</button>
+          </div>
+        </section>
+        <div id="apiCardsGrid" class="card-grid"></div>
+      </section>
+
       <section id="collection" class="view">
         <div class="panel">
           <div class="panel-heading">
-            <h3>Ajouter une carte</h3>
+            <h3>Ajouter une carte manuellement</h3>
             <span>Données utilisateur</span>
           </div>
           <form id="cardForm" class="card-form">
-            <input name="name" placeholder="Nom de la carte" required>
+            <input name="name" placeholder="Nom" required>
             <input name="set" placeholder="Série" required>
             <input name="number" placeholder="Numéro" required>
-            <select name="rarity">
-              <option>Common</option>
-              <option>Uncommon</option>
-              <option>Rare</option>
-              <option>Holo Rare</option>
-              <option>Secret Rare</option>
-            </select>
-            <select name="condition">
-              <option>Gem Mint</option>
-              <option>Mint</option>
-              <option selected>Near Mint</option>
-              <option>Excellent</option>
-              <option>Good</option>
-              <option>Played</option>
-              <option>Poor</option>
-            </select>
+            <select name="rarity"><option>Common</option><option>Uncommon</option><option>Rare</option><option>Holo Rare</option><option>Secret Rare</option></select>
+            <select name="condition"><option>Gem Mint</option><option>Mint</option><option selected>Near Mint</option><option>Excellent</option><option>Good</option><option>Played</option><option>Poor</option></select>
             <input name="quantity" type="number" min="1" value="1" aria-label="Quantité">
             <input name="price" type="number" min="0" step="0.1" placeholder="Prix €">
             <input name="location" placeholder="Classeur / page">
-            <input name="rating" type="number" min="1" max="10" value="8" aria-label="Note personnelle">
+            <input name="rating" type="number" min="1" max="10" value="8" aria-label="Note">
             <button class="primary-button" type="submit">Ajouter</button>
           </form>
         </div>
-
         <div class="panel">
           <div class="panel-heading">
             <h3>Ma collection</h3>
@@ -190,23 +180,22 @@
       </section>
 
       <section id="sets" class="view">
-        <div id="setProgress" class="set-grid"></div>
+        <div class="panel">
+          <div class="panel-heading">
+            <h3>Toutes les séries</h3>
+            <span id="setsCount">Chargement API</span>
+          </div>
+          <div id="setProgress" class="set-grid"></div>
+        </div>
       </section>
 
       <section id="wishlist" class="view">
         <div class="panel">
-          <div class="panel-heading">
-            <h3>Wishlist</h3>
-            <span>Priorités et budgets</span>
-          </div>
+          <div class="panel-heading"><h3>Wishlist</h3><span>Priorités et budgets</span></div>
           <form id="wishlistForm" class="wishlist-form">
             <input name="name" placeholder="Carte recherchée" required>
             <input name="budget" type="number" min="0" placeholder="Budget €">
-            <select name="priority">
-              <option>Haute</option>
-              <option>Moyenne</option>
-              <option>Basse</option>
-            </select>
+            <select name="priority"><option>Haute</option><option>Moyenne</option><option>Basse</option></select>
             <button class="primary-button" type="submit">Ajouter</button>
           </form>
           <div id="wishlistList" class="compact-list"></div>
@@ -215,17 +204,10 @@
 
       <section id="graded" class="view">
         <div class="panel">
-          <div class="panel-heading">
-            <h3>Cartes gradées</h3>
-            <span>PSA, BGS, CGC</span>
-          </div>
+          <div class="panel-heading"><h3>Cartes gradées</h3><span>PSA, BGS, CGC</span></div>
           <form id="gradedForm" class="wishlist-form">
-            <input name="name" placeholder="Nom de la carte" required>
-            <select name="company">
-              <option>PSA</option>
-              <option>BGS</option>
-              <option>CGC</option>
-            </select>
+            <input name="name" placeholder="Nom" required>
+            <select name="company"><option>PSA</option><option>BGS</option><option>CGC</option></select>
             <input name="grade" type="number" min="1" max="10" step="0.5" placeholder="Note" required>
             <input name="cert" placeholder="Certification">
             <input name="value" type="number" min="0" placeholder="Valeur €">
@@ -236,6 +218,14 @@
       </section>
     </main>
   </div>
+
+  <dialog id="cardModal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Carte scannée</h3>
+      <button id="closeModal" class="mini-button" type="button">Fermer</button>
+    </div>
+    <div id="modalBody"></div>
+  </dialog>
 
   <script src="./app.js"></script>
 </body>
