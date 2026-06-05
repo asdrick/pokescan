@@ -8,6 +8,10 @@ let apiPage = 1;
 let lastApiQuery = "";
 let cameraStream = null;
 let lastCapturedImage = "";
+let autoScanTimer = null;
+let autoScanBusy = false;
+let autoScanLocked = false;
+let lastScanText = "";
 
 const viewTitles = {
   dashboard: "Tableau de bord",
@@ -388,10 +392,10 @@ async function searchApiCards(reset = true) {
 }
 
 async function identifyScan() {
-  const query = document.querySelector("#scanQuery").value.trim();
+  const query = lastScanText.trim();
   if (!query) {
     document.querySelector("#scanConfidence").textContent = "Nom requis";
-    document.querySelector("#scanResult").innerHTML = empty("Aucun texte fiable détecté. Écris au moins le nom ou le numéro de la carte, puis relance l’identification.");
+    document.querySelector("#scanResult").innerHTML = empty("Aucun texte fiable détecté. Rapproche la carte, améliore la lumière et garde-la stable dans le cadre.");
     return;
   }
 
@@ -470,7 +474,9 @@ async function startCamera() {
     await video.play();
     document.querySelector("#scanPhoto").classList.add("hidden");
     video.classList.remove("hidden");
-    document.querySelector("#scanConfidence").textContent = "Caméra active";
+    document.querySelector("#scanConfidence").textContent = "Scan live";
+    document.querySelector("#scanOverlayText").textContent = "Stabilise la carte";
+    beginAutoScan();
   } catch (error) {
     document.querySelector("#scanConfidence").textContent = "Caméra bloquée";
     document.querySelector("#scanResult").innerHTML = empty("Sur iPhone, ouvre l’app en HTTPS avec Safari et accepte l’accès caméra.");
@@ -478,6 +484,7 @@ async function startCamera() {
 }
 
 function stopCamera() {
+  stopAutoScan();
   if (!cameraStream) return;
   cameraStream.getTracks().forEach(track => track.stop());
   cameraStream = null;
@@ -504,6 +511,87 @@ async function captureScan() {
   await tryReadText(canvas);
 }
 
+function stopAutoScan() {
+  if (autoScanTimer) clearInterval(autoScanTimer);
+  autoScanTimer = null;
+  autoScanBusy = false;
+}
+
+function beginAutoScan() {
+  stopAutoScan();
+  autoScanLocked = false;
+  lastScanText = "";
+  document.querySelector("#scanResult").innerHTML = empty("Analyse automatique en cours. La première bonne correspondance ouvrira la fiche de la carte.");
+  autoScanTimer = setInterval(autoScanFrame, 1400);
+  setTimeout(autoScanFrame, 500);
+}
+
+async function autoScanFrame() {
+  if (autoScanBusy || autoScanLocked) return;
+  autoScanBusy = true;
+  try {
+    const video = document.querySelector("#cameraVideo");
+    if (!video.videoWidth) return;
+    const canvas = document.querySelector("#captureCanvas");
+    drawCenteredCardFrame(video, canvas);
+    lastCapturedImage = canvas.toDataURL("image/jpeg", .9);
+    const text = await readCanvasText(canvas);
+    if (text && text.length > 3) {
+      lastScanText = text;
+      document.querySelector("#scanConfidence").textContent = "Texte détecté";
+      document.querySelector("#scanOverlayText").textContent = "Recherche...";
+      await identifyScan();
+    } else {
+      document.querySelector("#scanConfidence").textContent = "Lecture...";
+    }
+  } finally {
+    autoScanBusy = false;
+  }
+}
+
+function drawCenteredCardFrame(video, canvas) {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const targetRatio = 63 / 88;
+  let cropH = vh * .78;
+  let cropW = cropH * targetRatio;
+  if (cropW > vw * .82) {
+    cropW = vw * .82;
+    cropH = cropW / targetRatio;
+  }
+  const sx = (vw - cropW) / 2;
+  const sy = (vh - cropH) / 2;
+  canvas.width = Math.round(cropW);
+  canvas.height = Math.round(cropH);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
+}
+
+async function readCanvasText(canvas) {
+  try {
+    if (window.TextDetector) {
+      const detector = new TextDetector();
+      const results = await detector.detect(canvas);
+      return results
+        .map(item => item.rawValue)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    if (window.Tesseract) {
+      document.querySelector("#scanConfidence").textContent = "OCR IA...";
+      const result = await window.Tesseract.recognize(canvas, "eng+fra");
+      return (result.data?.text || "").replace(/\s+/g, " ").trim();
+    }
+
+    document.querySelector("#scanResult").innerHTML = empty("Le moteur OCR n’est pas chargé. Vérifie que ton iPhone est bien connecté à Internet puis rouvre l’app.");
+  } catch (error) {
+    document.querySelector("#scanConfidence").textContent = "Nouvel essai...";
+  }
+  return "";
+}
+
 async function tryReadText(canvas) {
   if (!window.TextDetector) {
     document.querySelector("#scanResult").innerHTML = empty("Photo capturée. Si le nom n’apparaît pas automatiquement, écris-le dans le champ puis clique Identifier.");
@@ -514,7 +602,7 @@ async function tryReadText(canvas) {
     const results = await detector.detect(canvas);
     const text = results.map(item => item.rawValue).join(" ").trim();
     if (text) {
-      document.querySelector("#scanQuery").value = text.split(/\s+/).slice(0, 4).join(" ");
+      lastScanText = text.split(/\s+/).slice(0, 8).join(" ");
       document.querySelector("#scanConfidence").textContent = "Texte détecté";
     }
   } catch (error) {
@@ -549,6 +637,10 @@ function openCardModal(card, fromScan = false) {
 
 function openScanResultsModal(cards, rawQuery) {
   const best = cards[0];
+  autoScanLocked = true;
+  stopAutoScan();
+  stopCamera();
+  document.querySelector("#scanDialog").close();
   document.querySelector("#modalTitle").textContent = "Résultat du scan";
   document.querySelector("#modalBody").innerHTML = `
     <div class="modal-card">
@@ -596,6 +688,8 @@ document.querySelectorAll("[data-view-jump]").forEach(button => button.addEventL
 document.querySelectorAll("[data-open-scanner]").forEach(button => button.addEventListener("click", () => {
   document.querySelector("#scanDialog").showModal();
   document.querySelector("#scanConfidence").textContent = "Prêt";
+  document.querySelector("#scanResult").innerHTML = empty("Démarrage de la caméra...");
+  startCamera();
 }));
 
 document.querySelector("#themeToggle").addEventListener("click", () => {
@@ -610,25 +704,12 @@ document.querySelector("#apiSearchButton").addEventListener("click", () => searc
 document.querySelector("#loadMoreCards").addEventListener("click", () => searchApiCards(false));
 document.querySelector("#apiSearch").addEventListener("keydown", event => { if (event.key === "Enter") searchApiCards(true); });
 document.querySelector("#apiSetFilter").addEventListener("change", () => searchApiCards(true));
-document.querySelector("#startCamera").addEventListener("click", startCamera);
-document.querySelector("#captureScan").addEventListener("click", captureScan);
-document.querySelector("#analyzeScan").addEventListener("click", identifyScan);
 document.querySelector("#closeModal").addEventListener("click", () => document.querySelector("#cardModal").close());
 document.querySelector("#closeScanDialog").addEventListener("click", () => {
   stopCamera();
   document.querySelector("#scanDialog").close();
 });
 document.querySelector("#scanDialog").addEventListener("close", stopCamera);
-
-document.querySelector("#cardImage").addEventListener("change", async event => {
-  const file = event.target.files[0];
-  if (!file) return;
-  lastCapturedImage = URL.createObjectURL(file);
-  document.querySelector("#scanPhoto").src = lastCapturedImage;
-  document.querySelector("#scanPhoto").classList.remove("hidden");
-  document.querySelector("#cameraVideo").classList.add("hidden");
-  document.querySelector("#scanConfidence").textContent = "Photo importée";
-});
 
 document.querySelector("#cardForm").addEventListener("submit", event => {
   event.preventDefault();
