@@ -1,197 +1,64 @@
-:root {
-  --bg: #030712;
-  --panel: #0b0f19;
-  --accent: #3b82f6;
-  --accent-glow: rgba(59, 130, 246, 0.25);
-  --laser: #06b6d4;
-  --text: #f3f4f6;
-  --muted: #9ca3af;
-  --success: #10b981;
-  --border: rgba(255, 255, 255, 0.06);
-}
-
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background-color: var(--bg);
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
-}
-
-.app-shell {
-  display: flex;
-  height: 100vh;
-  width: 100vw;
-}
-
-/* NAVIGATION GAUCHE (BUREAU) */
-.sidebar {
-  width: 260px;
-  background: var(--panel);
-  border-right: 1px solid var(--border);
+/* EXTENSION STYLES POUR LE SCANNER HAUTE FIABILITÉ */
+.scanner-stage {
+  position: relative;
   display: flex;
   flex-direction: column;
-  padding: 20px;
-  box-sizing: border-box;
 }
-.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; }
-.brand-mark { width: 14px; height: 14px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px var(--accent); }
-.brand strong { font-size: 16px; color: #fff; }
-.brand span { font-size: 11px; color: var(--muted); display: block; }
-.nav { display: flex; flex-direction: column; gap: 6px; flex: 1; }
-.nav-item {
-  background: transparent; border: none; color: var(--muted); text-align: left;
-  padding: 12px 16px; font-size: 14px; font-weight: 600; border-radius: 10px;
-  cursor: pointer; display: flex; align-items: center; gap: 10px;
-}
-.nav-item.active, .nav-item:hover { background: rgba(255, 255, 255, 0.04); color: #fff; }
-.nav-item.active { border-left: 3px solid var(--accent); }
-.sidebar-footer { font-size: 12px; color: var(--muted); }
 
-/* ZONE PRINCIPALE DE SCROLL */
-.content {
+.scanner-manual-fallback {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(11, 15, 23, 0.9);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scanner-manual-fallback input {
   flex: 1;
-  padding: 30px;
-  overflow-y: auto;
-  box-sizing: border-box;
-  padding-bottom: 100px; /* Espace pour la barre basse mobile */
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
 }
 
-.view-section { display: none; }
-.view-section.active { display: block; }
-.hidden { display: none !important; }
-
-/* LAYOUT CENTRAL DU BOUTON ACCUEIL */
-.hero-scanner-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 65vh;
-  text-align: center;
-  padding: 10px;
-}
-.hero-text h2 { font-size: 26px; margin-bottom: 8px; font-weight: 800; }
-.hero-text p { max-width: 460px; color: var(--muted); font-size: 14px; line-height: 1.5; margin-bottom: 40px; }
-
-.main-scan-trigger {
-  position: relative; background: transparent; border: none; cursor: pointer; width: 180px; height: 180px;
-}
-.btn-core {
-  position: absolute; inset: 8px; background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
-  border: 2px solid var(--accent); border-radius: 50%; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; color: #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
-}
-.scan-icon { font-size: 32px; color: var(--accent); margin-bottom: 4px; }
-.scan-text { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
-.pulse-ring { position: absolute; inset: 0; border: 2px solid var(--accent-glow); border-radius: 50%; animation: pulse 2.2s infinite linear; }
-
-@keyframes pulse {
-  0% { transform: scale(0.96); opacity: 1; }
-  100% { transform: scale(1.24); opacity: 0; }
+.scanner-manual-fallback button {
+  background: #3b82f6;
+  border: none;
+  color: #fff;
+  padding: 0 18px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
 }
 
-.mini-stats-row { display: flex; gap: 24px; margin-top: 36px; }
-.mini-stat { display: flex; flex-direction: column; align-items: center; }
-.mini-stat strong, .mini-stat span:first-child { font-size: 20px; font-weight: 700; color: #fff; }
-.mini-stat span:last-child { font-size: 12px; color: var(--muted); }
-
-/* GRILLE DE CARTES RESPONSIVE MOBILE */
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 14px;
-  margin-top: 16px;
-}
-.collection-card {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px;
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-}
-.collection-card img { width: 100%; height: auto; border-radius: 6px; will-change: transform; }
-.collection-card h4 { margin: 8px 0 2px 0; font-size: 13px; text-overflow: ellipsis; overflow: hidden; width: 100%; white-space: nowrap; }
-.collection-card p { margin: 0; font-size: 12px; color: var(--success); font-weight: bold; }
-
-/* SÉRIES GRID */
-.sets-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px; }
-.set-row-card { background: var(--panel); border: 1px solid var(--border); padding: 14px; border-radius: 12px; }
-.progress-bar-bg { background: rgba(255,255,255,0.05); height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden; }
-.progress-bar-fill { background: var(--accent); height: 100%; width: 0%; }
-
-/* BARRE NAVIGATION COMMODE DU BAS (MOBILE) */
-.bottom-nav {
-  position: fixed; bottom: 0; left: 0; right: 0; height: 64px; background: #070b16;
-  border-top: 1px solid var(--border); display: none; grid-template-columns: repeat(4, 1fr); z-index: 99;
-}
-.bottom-nav-item {
-  background: transparent; border: none; color: var(--muted); display: flex;
-  flex-direction: column; align-items: center; justify-content: center; cursor: pointer;
-}
-.bottom-nav-item.active { color: var(--accent); }
-.b-icon { font-size: 18px; margin-bottom: 2px; }
-.b-text { font-size: 10px; font-weight: 600; }
-
-/* STRUCTURE DU DIALOGUE CAMERA UNIQUE PRO */
-.fullscreen-scan-dialog {
-  width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; background: #000;
-  border: none; padding: 0; margin: 0; overflow: hidden;
-}
-.scan-overlay-header {
-  position: absolute; top: 0; left: 0; right: 0; padding: 16px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.85), transparent);
-  display: flex; justify-content: space-between; align-items: center; z-index: 10;
-}
-.close-scan-btn {
-  background: rgba(255,255,255,0.12); border: none; color: #fff; padding: 8px 16px;
-  border-radius: 20px; font-weight: 600; font-size: 13px; backdrop-filter: blur(5px);
-}
-.scan-status-indicator { font-size: 12px; font-weight: 600; color: var(--laser); background: rgba(6, 182, 212, 0.1); padding: 4px 10px; border-radius: 10px; }
-
-.camera-viewport-wrapper { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-#cameraVideo { width: 100%; height: 100%; object-fit: cover; will-change: transform; transform: translate3d(0,0,0); }
-
-/* RETICLE DE VISÉE HOLOGRAPHIQUE ULTRA COMPACT MOBILE */
-.hologram-reticle {
-  position: absolute; width: min(80vw, 290px); height: min(112vw, 406px);
-  border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.65);
-  border-radius: 14px; pointer-events: none; transform: translate3d(0,0,0);
-}
-.corner { position: absolute; width: 18px; height: 18px; border: 3px solid var(--laser); }
-.top-left { top: -1px; left: -1px; border-right: none; border-bottom: none; border-top-left-radius: 10px; }
-.top-right { top: -1px; right: -1px; border-left: none; border-bottom: none; border-top-right-radius: 10px; }
-.bottom-left { bottom: -1px; left: -1px; border-right: none; border-top: none; border-bottom-left-radius: 10px; }
-.bottom-right { bottom: -1px; right: -1px; border-left: none; border-top: none; border-bottom-right-radius: 10px; }
-
-.laser-line {
-  position: absolute; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--laser), transparent);
-  will-change: transform; animation: laserScan 2.2s linear infinite;
-}
-@keyframes laserScan {
-  0% { transform: translate3d(0, 20px, 0); }
-  50% { transform: translate3d(0, 380px, 0); }
-  100% { transform: translate3d(0, 20px, 0); }
+.scanner-manual-fallback button:hover {
+  background: #2563eb;
 }
 
-.ocr-target-box {
-  position: absolute; bottom: 8px; left: 12px; right: 12px; height: 42px;
-  border: 1px dashed rgba(6, 182, 212, 0.4); background: rgba(6, 182, 212, 0.05); border-radius: 6px;
+.status-badge {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: bold;
 }
-.reticle-hint { position: absolute; bottom: -32px; left: 0; right: 0; text-align: center; font-size: 11px; color: #fff; opacity: 0.8; }
 
-/* MODAL DE CONFIRMATION DES INFORMATIONS */
-.result-modal { background: #0c111d; border: 1px solid var(--border); border-radius: 20px; padding: 24px; max-width: 400px; width: 88%; color: #fff; box-shadow: 0 20px 40px rgba(0,0,0,0.5); border: none; }
-.result-modal::backdrop { backdrop-filter: blur(6px); background: rgba(0,0,0,0.6); }
-.modal-content-wrapper { display: flex; flex-direction: column; gap: 16px; }
-.modal-actions { display: flex; gap: 10px; }
-.action-btn { flex: 1; padding: 12px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; border: none; }
-.primary-action { background: var(--accent); color: #fff; }
-.secondary-action { background: rgba(255,255,255,0.06); color: var(--muted); }
+#ocrStatusEngine {
+  font-size: 11px;
+  color: #9ca3af;
+  display: block;
+  margin-top: 2px;
+}
 
-/* MEDIA QUERIES SMARTPHONE ACCÉLÉRÉ */
-@media (max-width: 768px) {
-  .sidebar { display: none; }
-  .bottom-nav { display: grid; }
-  .content { padding: 16px; padding-bottom: 90px; }
-  .hero-scanner-container { min-height: 70vh; }
+/* Amélioration de la fluidité vidéo sur smartphone */
+#cameraVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  will-change: transform;
 }
