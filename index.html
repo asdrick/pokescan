@@ -2,12 +2,12 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#050812">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="PokéScan">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>PokéScan Pro — Scanner d'Élite</title>
+  <title>PokéScan — Scanner Mobile Pro</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
@@ -15,55 +15,91 @@
 </head>
 <body>
   <div class="app-shell">
-    <aside class="sidebar" aria-label="Navigation">
+    <aside class="sidebar" aria-label="Navigation principale">
       <div class="brand">
         <div class="brand-mark"></div>
         <div>
           <strong>PokéScan Pro</strong>
-          <span>Vision Engine v3.0</span>
+          <span>Vision Engine v3.5</span>
         </div>
       </div>
       <nav class="nav">
-        <button class="nav-item active" data-view="dashboard" type="button"><span>⌂</span>Tableau de Bord</button>
-        <button class="nav-item" data-view="collection" type="button"><span>🗂️</span>Ma Collection</button>
+        <button class="nav-item active" data-view="dashboard" type="button"><span>⌂</span>Accueil</button>
+        <button class="nav-item" data-view="database" type="button"><span>⌕</span>Base de données</button>
+        <button class="nav-item" data-view="collection" type="button"><span>▦</span>Ma Collection</button>
+        <button class="nav-item" data-view="sets" type="button"><span>◎</span>Séries</button>
       </nav>
       <div class="sidebar-footer">
-        <div class="stats-badge">Mode Autonome Gratuit</div>
+        <div class="api-status online" id="apiStatus"><span class="pulse"></span> Mode Gratuit Illimité</div>
       </div>
     </aside>
 
-    <main class="main-content">
+    <main class="content">
       <section id="view-dashboard" class="view-section active">
         <div class="hero-scanner-container">
           <div class="hero-text">
-            <h2>Prêt à identifier une carte ?</h2>
-            <p>Placez votre carte Pokémon devant la caméra. L'IA extrait le numéro de série et récupère instantanément les visuels et prix du marché.</p>
+            <h2>Scanner une carte</h2>
+            <p>Ouvrez l'appareil photo, alignez le bas de la carte et laissez l'IA récupérer instantanément les informations et prix réels du marché.</p>
           </div>
           
           <button class="main-scan-trigger" id="central-scan-btn" type="button">
             <div class="pulse-ring"></div>
             <div class="btn-core">
               <span class="scan-icon">◉</span>
-              <span class="scan-text">SCANNER UNE CARTE</span>
+              <span class="scan-text">LANCER LE SCAN</span>
             </div>
           </button>
+
+          <div class="mini-stats-row">
+            <div class="mini-stat"><span id="dash-count">0</span> <span>cartes</span></div>
+            <div class="mini-stat"><span id="dash-value">0.00 €</span> <span>valeur</span></div>
+          </div>
         </div>
+      </section>
+
+      <section id="view-database" class="view-section hidden">
+        <div class="view-header">
+          <h2>Base de données TCG</h2>
+        </div>
+        <div id="apiCardsGrid" class="cards-grid"></div>
       </section>
 
       <section id="view-collection" class="view-section hidden">
         <div class="view-header">
-          <h2>Mes Cartes Scannées</h2>
-          <div id="collection-count" class="counter-pill">0 carte</div>
+          <h2>Ma Collection</h2>
+          <div id="collectionCount" class="counter-pill">0 carte</div>
         </div>
-        <div id="collection-grid" class="cards-grid"></div>
+        <div id="collectionGrid" class="cards-grid"></div>
+      </section>
+
+      <section id="view-sets" class="view-section hidden">
+        <div class="view-header">
+          <h2>Séries & Sets</h2>
+        </div>
+        <div id="setProgress" class="sets-grid"></div>
       </section>
     </main>
+
+    <nav class="bottom-nav">
+      <button class="bottom-nav-item active" data-view="dashboard" type="button">
+        <span class="b-icon">⌂</span><span class="b-text">Accueil</span>
+      </button>
+      <button class="bottom-nav-item" data-view="database" type="button">
+        <span class="b-icon">⌕</span><span class="b-text">Base</span>
+      </button>
+      <button class="bottom-nav-item" data-view="collection" type="button">
+        <span class="b-icon">▦</span><span class="b-text">Classeur</span>
+      </button>
+      <button class="bottom-nav-item" data-view="sets" type="button">
+        <span class="b-icon">◎</span><span class="b-text">Séries</span>
+      </button>
+    </nav>
   </div>
 
   <dialog id="scanDialog" class="fullscreen-scan-dialog">
     <div class="scan-overlay-header">
-      <button id="closeScanDialog" class="close-scan-btn" type="button">✕ Quitter le scan</button>
-      <div class="scan-status-indicator">Analyse en temps réel...</div>
+      <button id="closeScanDialog" class="close-scan-btn" type="button">✕ Fermer</button>
+      <div id="scanOverlayStatus" class="scan-status-indicator">Analyse active...</div>
     </div>
     
     <div class="camera-viewport-wrapper">
@@ -76,7 +112,8 @@
         <div class="corner bottom-left"></div>
         <div class="corner bottom-right"></div>
         <div class="laser-line"></div>
-        <div class="reticle-hint">Alignez le bas de la carte (ex: 142/165)</div>
+        <div class="reticle-hint">Positionnez le numéro (ex: 162/198) ici</div>
+        <div class="ocr-target-box"></div>
       </div>
     </div>
   </dialog>
