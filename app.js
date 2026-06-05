@@ -13,9 +13,6 @@ let autoScanBusy = false;
 let autoScanLocked = false;
 let lastScanText = "";
 
-// MOTEUR DE RECONNAISSANCE PRÉ-CHARGÉ UNIQUE EN ARRIÈRE-PLAN
-let globalOcrWorker = null;
-
 const viewTitles = {
   dashboard: "Tableau de bord",
   scanner: "Scanner intelligent",
@@ -29,7 +26,12 @@ const viewTitles = {
 function loadState() {
   const saved = localStorage.getItem("pokescan-collection-v3");
   if (saved) return JSON.parse(saved);
-  return { cards: [], wishlist: [], graded: [], light: false };
+  return {
+    cards: [],
+    wishlist: [],
+    graded: [],
+    light: false
+  };
 }
 
 function createId() {
@@ -58,22 +60,8 @@ function escapeHtml(value) {
 
 function setApiStatus(mode, text) {
   const status = document.querySelector("#apiStatus");
-  if (!status) return;
   status.className = `api-status ${mode}`;
   status.innerHTML = `<span class="pulse"></span>${escapeHtml(text)}`;
-}
-
-// BOOTSTRAP : INITIALISATION DE L'INTELLIGENCE ARTIFICIELLE AU DEMARRAGE
-async function preheatOcrEngine() {
-  const textIndicator = document.getElementById("ocrStatusEngine");
-  try {
-    globalOcrWorker = await Tesseract.createWorker("eng");
-    if (textIndicator) textIndicator.innerText = "Moteur IA : Prêt ✔";
-    setApiStatus("online", "Système paré");
-  } catch (err) {
-    if (textIndicator) textIndicator.innerText = "Moteur IA : Erreur";
-    console.error("Échec initialisation Tesseract:", err);
-  }
 }
 
 async function apiGet(path, params = {}) {
@@ -92,12 +80,44 @@ function extractPrice(card) {
     const eur = cm.trendPrice || cm.averageSellPrice || cm.lowPrice || cm.avg1 || cm.avg7 || cm.avg30;
     if (eur) return { value: Number(eur), currency: "EUR", source: "Cardmarket" };
   }
+
   const variants = Object.values(card.tcgplayer?.prices || {});
   for (const variant of variants) {
     const usd = variant.market || variant.mid || variant.low;
     if (usd) return { value: Number(usd), currency: "USD", source: "TCGPlayer" };
   }
+
   return { value: 0, currency: "EUR", source: "Non disponible" };
+}
+
+// Fonction pour générer le récapitulatif détaillé des prix par notation/édition
+function renderDetailedPrices(card) {
+  let html = `<div class="price-stack" style="margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px;">`;
+  let hasPrices = false;
+
+  if (card.cardmarket?.prices) {
+    const cm = card.cardmarket.prices;
+    html += `<p class="eyebrow" style="color: var(--cyan); margin-bottom: 6px;">Prix Cardmarket (Europe)</p>`;
+    if (cm.trendPrice) { html += `<div class="price-pill"><span>Tendance Marché</span><strong>${money(cm.trendPrice, "EUR")}</strong></div>`; hasPrices = true; }
+    if (cm.lowPrice) { html += `<div class="price-pill"><span>Prix Minimum</span><strong>${money(cm.lowPrice, "EUR")}</strong></div>`; hasPrices = true; }
+    if (cm.averageSellPrice) { html += `<div class="price-pill"><span>Vente moyenne</span><strong>${money(cm.averageSellPrice, "EUR")}</strong></div>`; hasPrices = true; }
+    if (cm.avg30) { html += `<div class="price-pill"><span>Moyenne 30 jours</span><strong>${money(cm.avg30, "EUR")}</strong></div>`; hasPrices = true; }
+  }
+
+  if (card.tcgplayer?.prices) {
+    html += `<p class="eyebrow" style="color: var(--pink); margin-top: 10px; margin-bottom: 6px;">Prix TCGPlayer par Édition / Notation</p>`;
+    for (const [type, pr] of Object.entries(card.tcgplayer.prices)) {
+      const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+      if (pr.market) { html += `<div class="price-pill"><span>${typeLabel} (Market)</span><strong>${money(pr.market, "USD")}</strong></div>`; hasPrices = true; }
+      if (pr.low) { html += `<div class="price-pill"><span>${typeLabel} (Minimum)</span><strong>${money(pr.low, "USD")}</strong></div>`; hasPrices = true; }
+    }
+  }
+
+  if (!hasPrices) {
+    html += `<div class="price-pill"><span>Prix détaillés</span><strong>Indisponibles sur l'API</strong></div>`;
+  }
+  html += `</div>`;
+  return html;
 }
 
 function apiCardToCollection(card) {
@@ -127,8 +147,7 @@ function apiCardToCollection(card) {
 }
 
 function currentFilter() {
-  const searchInput = document.querySelector("#globalSearch");
-  return searchInput ? searchInput.value.trim().toLowerCase() : "";
+  return document.querySelector("#globalSearch").value.trim().toLowerCase();
 }
 
 function filteredCards() {
@@ -290,8 +309,7 @@ function apiCardTile(card) {
 
 function renderAll() {
   document.body.classList.toggle("light", state.light);
-  const toggleBtn = document.querySelector("#themeToggle");
-  if (toggleBtn) toggleBtn.textContent = state.light ? "Mode sombre" : "Mode clair";
+  document.querySelector("#themeToggle").textContent = state.light ? "Mode sombre" : "Mode clair";
   renderDashboard();
   renderCollection();
   renderSets();
@@ -310,9 +328,7 @@ async function loadSets() {
     const data = await apiGet("/sets", { orderBy: "-releaseDate" });
     apiSets = data.data || [];
     const select = document.querySelector("#apiSetFilter");
-    if (select) {
-      select.innerHTML = `<option value="">Toutes les séries</option>` + apiSets.map(set => `<option value="${escapeHtml(set.id)}">${escapeHtml(set.name)}</option>`).join("");
-    }
+    select.innerHTML = `<option value="">Toutes les séries</option>` + apiSets.map(set => `<option value="${escapeHtml(set.id)}">${escapeHtml(set.name)}</option>`).join("");
     setApiStatus("online", "API connectée");
   } catch (error) {
     setApiStatus("offline", "API indisponible");
@@ -348,7 +364,19 @@ function scanTokens(value) {
 }
 
 function scanNumber(value) {
-  return normalizeScanText(value).match(/\b(\d{1,3})\s*[\/\-\|]\s*(\d{1,3})\b/)?.[1] || normalizeScanText(value).match(/\b\d{1,3}\b/)?.[0] || "";
+  return normalizeScanText(value).match(/\b(\d{1,3})\s*\/\s*(\d{1,3})\b/)?.[1] || normalizeScanText(value).match(/\b\d{1,3}\b/)?.[0] || "";
+}
+
+function scanSearchTerms(value) {
+  const tokens = scanTokens(value);
+  const number = scanNumber(value);
+  const terms = [];
+  const joined = tokens.slice(0, 5).join(" ");
+  if (joined) terms.push(joined);
+  if (tokens.length) terms.push(tokens[0]);
+  if (tokens.length > 1) terms.push(tokens.slice(0, 2).join(" "));
+  if (number) terms.push(number);
+  return [...new Set(terms)].slice(0, 4);
 }
 
 function scoreScanCandidate(card, rawText) {
@@ -356,11 +384,13 @@ function scoreScanCandidate(card, rawText) {
   const number = scanNumber(rawText);
   const haystack = normalizeScanText(`${card.name} ${card.set?.name || ""} ${card.number || ""} ${(card.types || []).join(" ")}`);
   let score = 0;
-  if (number && String(card.number || "").startsWith(number)) score += 50; // Boost de priorité sur le numéro exact
-  if (normalizeScanText(card.name) && normalizeScanText(rawText).includes(normalizeScanText(card.name))) score += 40;
+  if (number && String(card.number || "").startsWith(number)) score += 42;
+  if (normalizeScanText(card.name) && normalizeScanText(rawText).includes(normalizeScanText(card.name))) score += 44;
   tokens.forEach(token => {
-    if (haystack.includes(token)) score += token.length > 3 ? 8 : 4;
+    if (haystack.includes(token)) score += token.length > 3 ? 9 : 5;
   });
+  if ((card.name || "").toLowerCase().includes(" ex") && tokens.includes("ex")) score += 8;
+  if ((card.name || "").toLowerCase().includes("vmax") && tokens.includes("vmax")) score += 10;
   return Math.min(99, score);
 }
 
@@ -375,7 +405,12 @@ async function searchApiCards(reset = true) {
   lastApiQuery = q;
   try {
     setApiStatus("", "Recherche API");
-    const data = await apiGet("/cards", { page: apiPage, pageSize: PAGE_SIZE, q, orderBy: "-set.releaseDate" });
+    const data = await apiGet("/cards", {
+      page: apiPage,
+      pageSize: PAGE_SIZE,
+      q,
+      orderBy: "-set.releaseDate"
+    });
     apiCards = [...apiCards, ...(data.data || [])];
     apiPage += 1;
     setApiStatus("online", "API connectée");
@@ -386,64 +421,50 @@ async function searchApiCards(reset = true) {
   renderAll();
 }
 
-// STRATÉGIE DE SCAN INTERNE UNIQUE ET ROBUSTE
 async function identifyScan() {
   const query = lastScanText.trim();
-  if (!query) return;
+  if (!query) {
+    document.querySelector("#scanConfidence").textContent = "Nom requis";
+    document.querySelector("#scanResult").innerHTML = empty("Aucun texte fiable détecté. Rapproche la carte, améliore la lumière et garde-la stable dans le cadre.");
+    return;
+  }
 
-  const confidenceBadge = document.querySelector("#scanConfidence");
-  const resultZone = document.querySelector("#scanResult");
-
-  confidenceBadge.textContent = "Analyse en cours...";
-  
+  document.querySelector("#scanConfidence").textContent = "Analyse...";
+  document.querySelector("#scanResult").innerHTML = empty("Comparaison avec la base Pokémon TCG...");
   try {
-    // Étape 1 : On vérifie si un numéro de carte type "145/192" ou "051" ressort de la lecture
-    const detectedNumber = scanNumber(query);
-    let apiQueryString = "";
-
-    if (detectedNumber) {
-      apiQueryString = `number:${detectedNumber}`;
-    } else {
-      const tokens = scanTokens(query).filter(t => t.length > 2);
-      if (tokens.length === 0) {
-        confidenceBadge.textContent = "Ajustement...";
-        return;
-      }
-      apiQueryString = `name:${tokens[0]}*`;
+    const searches = scanSearchTerms(query);
+    const results = [];
+    const seen = new Set();
+    for (const term of searches) {
+      const data = await apiGet("/cards", {
+        page: 1,
+        pageSize: 12,
+        q: buildCardQuery(term, ""),
+        orderBy: "-set.releaseDate"
+      });
+      (data.data || []).forEach(card => {
+        if (!seen.has(card.id)) {
+          seen.add(card.id);
+          results.push(card);
+        }
+      });
     }
 
-    // Étape 2 : UNE SEULE REQUÊTE RÉSEAU PROPRE (Plus de surcharge due aux boucles)
-    const data = await apiGet("/cards", { page: 1, pageSize: 14, q: apiQueryString, orderBy: "-set.releaseDate" });
-    const rawResults = data.data || [];
-
-    // Étape 3 : Attribution des scores de pertinence vis-à-vis des filtres de mouvement
-    const evaluatedCards = rawResults
+    const cards = results
       .map(card => ({ ...card, scanScore: scoreScanCandidate(card, query) }))
-      .filter(card => card.scanScore > 15) // On rejette le bruit de fond
+      .filter(card => card.scanScore > 0)
       .sort((a, b) => b.scanScore - a.scanScore)
-      .slice(0, 6);
+      .slice(0, 8);
 
-    if (evaluatedCards.length > 0) {
-      // SI LE MEILLEUR CANDIDAT REPRÉSENTE UNE RECONNAISSANCE SOLIDE : ON COUPE DIRECTEMENT POUR EVITER LE FLOU CONTINU
-      if (evaluatedCards[0].scanScore >= 45) {
-        autoScanLocked = true;
-        stopAutoScan();
-        stopCamera();
-        document.querySelector("#scanDialog").close();
-        openScanResultsModal(evaluatedCards, query);
-        return;
-      }
-
-      // Rendu intermédiaire passif dans la barre latérale sans couper le flux vidéo si le score est moyen
-      confidenceBadge.textContent = `Confiance : ${evaluatedCards[0].scanScore}%`;
-      resultZone.className = "scan-result";
-      resultZone.innerHTML = evaluatedCards.map(scanCandidateTile).join("");
-    } else {
-      confidenceBadge.textContent = "Recherche...";
-    }
+    const knownIds = new Set(apiCards.map(card => card.id));
+    apiCards = [...cards.filter(card => !knownIds.has(card.id)), ...apiCards];
+    document.querySelector("#scanConfidence").textContent = cards.length ? `Meilleur score ${cards[0].scanScore}%` : "Aucun résultat fiable";
+    document.querySelector("#scanResult").className = "scan-result";
+    document.querySelector("#scanResult").innerHTML = cards.length ? cards.map(scanCandidateTile).join("") : empty("Aucune carte fiable trouvée. Essaie avec le nom anglais exact et le numéro, ex: Charizard ex 125/197.");
+    if (cards.length) openScanResultsModal(cards, query);
   } catch (error) {
-    console.error("Erreur d'analyse réseau du scanner:", error);
-    confidenceBadge.textContent = "Lenteur réseau";
+    document.querySelector("#scanConfidence").textContent = "API indisponible";
+    document.querySelector("#scanResult").innerHTML = empty("L’identification en ligne n’a pas répondu.");
   }
 }
 
@@ -459,6 +480,10 @@ function scanCandidateTile(card) {
         </div>
         <strong>${card.scanScore || 0}%</strong>
       </div>
+      <div class="price-stack">
+        <div class="price-pill"><span>Prix</span><strong>${price.value ? money(price.value, price.currency) : "N/A"}</strong></div>
+        <div class="price-pill"><span>Source</span><strong>${escapeHtml(price.source)}</strong></div>
+      </div>
       <div class="card-actions">
         <button class="mini-button" data-api-open="${escapeHtml(card.id)}" type="button">Détails</button>
         <button class="mini-button" data-api-add="${escapeHtml(card.id)}" type="button">Ajouter</button>
@@ -471,11 +496,7 @@ async function startCamera() {
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("camera");
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { 
-        facingMode: "environment", 
-        width: { ideal: 1920 }, // Résolution native élevée pour extraire les petits textes nets
-        height: { ideal: 1080 } 
-      },
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 1920 } },
       audio: false
     });
     const video = document.querySelector("#cameraVideo");
@@ -483,12 +504,12 @@ async function startCamera() {
     await video.play();
     document.querySelector("#scanPhoto").classList.add("hidden");
     video.classList.remove("hidden");
-    document.querySelector("#scanConfidence").textContent = "Analyse stabilisée";
-    document.querySelector("#scanOverlayText").textContent = "Crashez le bas de la carte";
+    document.querySelector("#scanConfidence").textContent = "Scan live";
+    document.querySelector("#scanOverlayText").textContent = "Stabilise la carte";
     beginAutoScan();
   } catch (error) {
     document.querySelector("#scanConfidence").textContent = "Caméra bloquée";
-    document.querySelector("#scanResult").innerHTML = empty("Veuillez accorder l'accès caméra et utiliser une connexion sécurisée (HTTPS).");
+    document.querySelector("#scanResult").innerHTML = empty("Sur iPhone, ouvre l’app en HTTPS avec Safari et accepte l’accès caméra.");
   }
 }
 
@@ -502,6 +523,49 @@ function stopCamera() {
   video.srcObject = null;
 }
 
+// Réécriture de la capture photo manuelle demandée par l'utilisateur
+async function captureScan() {
+  const video = document.querySelector("#cameraVideo");
+  const canvas = document.querySelector("#captureCanvas");
+  if (!video.videoWidth) {
+    document.querySelector("#scanConfidence").textContent = "Pas d’image caméra";
+    return;
+  }
+
+  stopAutoScan();
+  autoScanLocked = true;
+  document.querySelector("#scanConfidence").textContent = "Photo prise !";
+  document.querySelector("#scanOverlayText").textContent = "Analyse de l'image...";
+
+  // Recadrage précis sur le réticule central
+  drawCenteredCardFrame(video, canvas);
+  
+  lastCapturedImage = canvas.toDataURL("image/jpeg", .92);
+  document.querySelector("#scanPhoto").src = lastCapturedImage;
+  document.querySelector("#scanPhoto").classList.remove("hidden");
+  video.classList.add("hidden");
+
+  // Analyse OCR et recherche instantanée
+  const text = await readCanvasText(canvas);
+  if (text && text.trim().length > 3) {
+    lastScanText = text;
+    document.querySelector("#scanConfidence").textContent = "Texte lu !";
+    await identifyScan();
+  } else {
+    document.querySelector("#scanConfidence").textContent = "Lecture impossible";
+    document.querySelector("#scanResult").innerHTML = empty("Aucun texte lisible détecté sur la photo. Ajustez la lumière, recentrez et réessayez.");
+    
+    setTimeout(() => {
+      if (document.querySelector("#scanDialog").open) {
+        document.querySelector("#scanPhoto").classList.add("hidden");
+        video.classList.remove("hidden");
+        document.querySelector("#scanOverlayText").textContent = "Place la carte ici";
+        beginAutoScan();
+      }
+    }, 3000);
+  }
+}
+
 function stopAutoScan() {
   if (autoScanTimer) clearInterval(autoScanTimer);
   autoScanTimer = null;
@@ -512,66 +576,73 @@ function beginAutoScan() {
   stopAutoScan();
   autoScanLocked = false;
   lastScanText = "";
-  document.querySelector("#scanResult").innerHTML = empty("Présentez la carte. L'algorithme élimine automatiquement les tremblements.");
-  autoScanTimer = setInterval(autoScanFrame, 1000); // Analyse cadencée à 1 seconde pour soulager le CPU
+  document.querySelector("#scanResult").innerHTML = empty("Analyse automatique active. Le bouton ci-dessous permet de forcer une capture manuelle.");
+  autoScanTimer = setInterval(autoScanFrame, 1400);
+  setTimeout(autoScanFrame, 500);
 }
 
-// PIPELINE DE TRAITEMENT D'IMAGE ANTI-TREMBLEMENT
 async function autoScanFrame() {
   if (autoScanBusy || autoScanLocked) return;
   autoScanBusy = true;
-  
   try {
     const video = document.querySelector("#cameraVideo");
-    if (!video || !video.videoWidth) return;
-    
+    if (!video.videoWidth) return;
     const canvas = document.querySelector("#captureCanvas");
-    const ctx = canvas.getContext("2d");
-
-    // Recadrage strict et optimisé de l'image (400x120px) centré sur la zone textuelle
-    canvas.width = 420;
-    canvas.height = 140;
-
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-    
-    // Extraction exclusive de la moitié inférieure de la zone ciblée (où résident les numéros et le nom)
-    const sx = Math.floor(vw * 0.25);
-    const sy = Math.floor(vh * 0.55);
-    const sWidth = Math.floor(vw * 0.50);
-    const sHeight = Math.floor(vh * 0.25);
-
-    ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
-
-    // ALGORITHME DE BINARISATION LOGICIELLE (Transforme en Noir et Blanc pur haut contraste)
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const pixels = imgData.data;
-    for (let i = 0; i < pixels.length; i += 4) {
-      // Formule mathématique de luminance relative humaine
-      const brightness = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
-      // Conversion radicale pour rendre le texte net malgré le bougé
-      const thresholdColor = brightness > 120 ? 255 : 0;
-      pixels[i] = thresholdColor;
-      pixels[i + 1] = thresholdColor;
-      pixels[i + 2] = thresholdColor;
+    drawCenteredCardFrame(video, canvas);
+    lastCapturedImage = canvas.toDataURL("image/jpeg", .9);
+    const text = await readCanvasText(canvas);
+    if (text && text.length > 3) {
+      lastScanText = text;
+      document.querySelector("#scanConfidence").textContent = "Texte détecté";
+      document.querySelector("#scanOverlayText").textContent = "Recherche...";
+      await identifyScan();
+    } else {
+      document.querySelector("#scanConfidence").textContent = "Lecture...";
     }
-    ctx.putImageData(imgData, 0, 0);
-
-    // Envoi du canvas propre et contrasté au moteur en tâche de fond
-    if (globalOcrWorker) {
-      const result = await globalOcrWorker.recognize(canvas);
-      const text = (result.data?.text || "").replace(/\s+/g, " ").trim();
-      
-      if (text.length > 3 && text !== lastScanText) {
-        lastScanText = text;
-        await identifyScan();
-      }
-    }
-  } catch (err) {
-    console.warn("Échec d'échantillonnage de frame (mouvement trop brusque) :", err);
   } finally {
     autoScanBusy = false;
   }
+}
+
+function drawCenteredCardFrame(video, canvas) {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const targetRatio = 63 / 88;
+  let cropH = vh * .78;
+  let cropW = cropH * targetRatio;
+  if (cropW > vw * .82) {
+    cropW = vw * .82;
+    cropH = cropW / targetRatio;
+  }
+  const sx = (vw - cropW) / 2;
+  const sy = (vh - cropH) / 2;
+  canvas.width = Math.round(cropW);
+  canvas.height = Math.round(cropH);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
+}
+
+async function readCanvasText(canvas) {
+  try {
+    if (window.TextDetector) {
+      const detector = new TextDetector();
+      const results = await detector.detect(canvas);
+      return results
+        .map(item => item.rawValue)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    if (window.Tesseract) {
+      document.querySelector("#scanConfidence").textContent = "OCR IA...";
+      const result = await window.Tesseract.recognize(canvas, "eng+fra");
+      return (result.data?.text || "").replace(/\s+/g, " ").trim();
+    }
+  } catch (error) {
+    document.querySelector("#scanConfidence").textContent = "Nouvel essai...";
+  }
+  return "";
 }
 
 function openCardModal(card, fromScan = false) {
@@ -586,12 +657,25 @@ function openCardModal(card, fromScan = false) {
         <h2>${escapeHtml(name)}</h2>
         <p class="card-meta">${escapeHtml(card.set?.name || card.set || "")} · ${escapeHtml(card.number || "")} · ${escapeHtml(card.rarity || "")}</p>
         <div class="price-stack">
-          <div class="price-pill"><span>Prix estimé</span><strong>${price.value ? money(price.value, price.currency) : "Non disponible"}</strong></div>
-          <div class="price-pill"><span>Source prix</span><strong>${escapeHtml(price.source)}</strong></div>
+          <div class="price-pill"><span>Prix estimé principal</span><strong>${price.value ? money(price.value, price.currency) : "Non disponible"}</strong></div>
+          <div class="price-pill"><span>Source principale</span><strong>${escapeHtml(price.source)}</strong></div>
           <div class="price-pill"><span>Type</span><strong>${escapeHtml((card.types || []).join(", ") || "N/A")}</strong></div>
           <div class="price-pill"><span>Artiste</span><strong>${escapeHtml(card.artist || "N/A")}</strong></div>
         </div>
-        <button class="primary-button" data-modal-add="${escapeHtml(card.id || card.apiId || "")}" type="button">Ajouter à la collection</button>
+        ${lastCapturedImage && fromScan ? `<p class="card-meta">Image capturée disponible.</p>` : ""}
+        
+        ${(card.cardmarket || card.tcgplayer) ? renderDetailedPrices(card) : ""}
+        
+        <div style="margin-top: 16px;">
+          ${card.apiId ? `
+            <div class="price-pill" style="background: rgba(46, 242, 162, 0.12); border: 1px solid var(--green);">
+              <span>Dans votre collection</span><strong>État : ${escapeHtml(card.condition)} (x${card.quantity})</strong>
+            </div>
+            <p class="card-meta" style="margin-top: 6px;">Classeur : ${escapeHtml(card.location || "Non spécifié")} · Note : ${card.rating}/10</p>
+          ` : `
+            <button class="primary-button" data-modal-add="${escapeHtml(card.id)}" type="button" style="width: 100%;">Ajouter à ma collection</button>
+          `}
+        </div>
       </div>
     </div>
   `;
@@ -603,32 +687,35 @@ function openScanResultsModal(cards, rawQuery) {
   autoScanLocked = true;
   stopAutoScan();
   stopCamera();
-  
-  // On s'assure d'injecter la carte dans la liste d'index globale de session pour la rendre sélectionnable
-  const knownIds = new Set(apiCards.map(c => c.id));
-  cards.forEach(c => {
-    if (!knownIds.has(c.id)) apiCards.push(c);
-  });
-
   document.querySelector("#scanDialog").close();
-  document.querySelector("#modalTitle").textContent = "Résultat du Scan";
+  
+  document.querySelector("#modalTitle").textContent = "Résultat du scan";
   document.querySelector("#modalBody").innerHTML = `
     <div class="modal-card">
       <div>
-        <h2 style="margin:0 0 4px 0;">${escapeHtml(best.name)}</h2>
-        <p class="card-meta" style="margin-bottom:16px;">Meilleure correspondance (Fiabilité : ${best.scanScore}%)</p>
-        <div class="compact-list" style="max-height: 320px; overflow-y:auto;">
+        ${lastCapturedImage ? `<img src="${escapeHtml(lastCapturedImage)}" alt="Photo scannée">` : `<div class="collection-art"></div>`}
+        <p class="card-meta" style="margin-top: 8px;">Texte analysé : ${escapeHtml(rawQuery)}</p>
+      </div>
+      <div>
+        <h2>${escapeHtml(best.name)}</h2>
+        <p class="card-meta">Meilleure correspondance · Fiabilité ${best.scanScore}%</p>
+        
+        ${renderDetailedPrices(best)}
+        
+        <div class="compact-list" style="margin-top: 16px;">
+          <h3 style="margin-bottom: 8px;">Toutes les correspondances trouvées :</h3>
           ${cards.map(card => {
             const price = extractPrice(card);
             return `
-              <div class="compact-row" style="padding: 10px; background: rgba(255,255,255,0.02); margin-bottom: 6px; border-radius: 8px;">
-                <img class="thumb" src="${escapeHtml(card.images?.small || card.images?.large || "")}" alt="" style="width:42px; height:auto; border-radius:4px;">
-                <div style="flex:1; margin-left:12px;">
+              <div class="compact-row">
+                <img class="thumb" src="${escapeHtml(card.images?.small || card.images?.large || "")}" alt="">
+                <div>
                   <strong>${escapeHtml(card.name)}</strong>
-                  <div class="compact-meta">${escapeHtml(card.set?.name || "")} · N° ${escapeHtml(card.number || "")}</div>
+                  <div class="compact-meta">${escapeHtml(card.set?.name || "")} · ${escapeHtml(card.number || "")}</div>
                 </div>
-                <div class="card-actions" style="margin:0; display:flex; align-items:center; gap:8px;">
-                  <strong style="color:var(--color-success, #10b981); font-size:13px;">${price.value ? money(price.value, price.currency) : "N/A"}</strong>
+                <div class="card-actions">
+                  <strong>${price.value ? money(price.value, price.currency) : "N/A"}</strong>
+                  <button class="mini-button" data-api-open="${escapeHtml(card.id)}" type="button">Détails</button>
                   <button class="mini-button" data-api-add="${escapeHtml(card.id)}" type="button">Ajouter</button>
                 </div>
               </div>
@@ -649,30 +736,15 @@ function addApiCardById(id) {
   renderAll();
 }
 
-// INTÉGRATION COMMUNE DES SECOURS MANUELS DEPUIS LE SCANNER
-async function triggerManualFallbackWorkflow() {
-  const val = document.getElementById("scannerQuickFallbackField").value.trim();
-  if (!val) return;
-  document.querySelector("#scanConfidence").textContent = "Recherche...";
-  lastScanText = val;
-  await identifyScan();
-}
-
-// ÉCOUTEURS D'ÉVÉNEMENTS ET GESTION DES CLICS
+// Événements généraux et navigation
 document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => switchView(button.dataset.view)));
 document.querySelectorAll("[data-view-jump]").forEach(button => button.addEventListener("click", () => switchView(button.dataset.viewJump)));
 document.querySelectorAll("[data-open-scanner]").forEach(button => button.addEventListener("click", () => {
-  document.getElementById("scannerQuickFallbackField").value = "";
   document.querySelector("#scanDialog").showModal();
   document.querySelector("#scanConfidence").textContent = "Prêt";
-  document.querySelector("#scanResult").innerHTML = empty("Initialisation de l'objectif...");
+  document.querySelector("#scanResult").innerHTML = empty("Démarrage de la caméra...");
   startCamera();
 }));
-
-document.getElementById("scannerQuickFallbackBtn").addEventListener("click", triggerManualFallbackWorkflow);
-document.getElementById("scannerQuickFallbackField").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") triggerManualFallbackWorkflow();
-});
 
 document.querySelector("#themeToggle").addEventListener("click", () => {
   state.light = !state.light;
@@ -692,6 +764,9 @@ document.querySelector("#closeScanDialog").addEventListener("click", () => {
   document.querySelector("#scanDialog").close();
 });
 document.querySelector("#scanDialog").addEventListener("close", stopCamera);
+
+// Événement d'écoute attaché au bouton "Prendre en photo"
+document.querySelector("#manualCaptureBtn").addEventListener("click", captureScan);
 
 document.querySelector("#cardForm").addEventListener("submit", event => {
   event.preventDefault();
@@ -728,10 +803,7 @@ document.addEventListener("click", event => {
   const openLocal = event.target.closest("[data-open-local]");
   const wishDel = event.target.closest("[data-wish-delete]");
 
-  if (apiAdd) {
-    addApiCardById(apiAdd.dataset.apiAdd);
-    document.querySelector("#cardModal").close();
-  }
+  if (apiAdd) addApiCardById(apiAdd.dataset.apiAdd);
   if (apiOpen) {
     const card = apiCards.find(item => item.id === apiOpen.dataset.apiOpen);
     if (card) openCardModal(card);
@@ -782,9 +854,5 @@ document.querySelector("#gradedForm").addEventListener("submit", event => {
   renderAll();
 });
 
-// INITIALISATION AU CHARGEMENT DE LA PAGE
-window.addEventListener("DOMContentLoaded", () => {
-  preheatOcrEngine();
-  renderAll();
-  loadSets();
-});
+renderAll();
+loadSets();
