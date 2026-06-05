@@ -101,8 +101,8 @@
         <section class="panel scanner-launch">
           <div>
             <p class="eyebrow">Scan professionnel</p>
-            <h2>Une fenêtre dédiée s’ouvre pour cadrer la carte.</h2>
-            <p class="card-meta">Capture la carte dans le rectangle, puis l’app cherche les meilleures correspondances dans Pokémon TCG API avec les prix disponibles.</p>
+            <h2>Un seul bouton. La caméra scanne automatiquement.</h2>
+            <p class="card-meta">Place la carte dans le cadre. L’app capture, lit le texte, cherche dans Pokémon TCG API et affiche la fiche complète avec prix.</p>
           </div>
           <button class="primary-button" data-open-scanner type="button">Ouvrir le scanner</button>
         </section>
@@ -202,46 +202,35 @@
 
   <dialog id="scanDialog" class="scan-dialog">
     <div class="modal-head">
-      <h3>Scanner une carte</h3>
+      <h3>Scan automatique</h3>
       <button id="closeScanDialog" class="mini-button" type="button">Fermer</button>
     </div>
     <div class="scanner-grid">
       <section class="scanner-stage">
-        <div class="scanner-toolbar">
-          <button id="startCamera" class="primary-button" type="button">Démarrer caméra</button>
-          <button id="captureScan" class="ghost-button" type="button">Capturer</button>
-          <label class="ghost-button file-button">
-            Importer photo
-            <input id="cardImage" type="file" accept="image/*">
-          </label>
-        </div>
         <div class="camera-frame">
           <video id="cameraVideo" playsinline muted></video>
           <canvas id="captureCanvas" class="hidden"></canvas>
           <img id="scanPhoto" class="hidden" alt="Carte capturée">
           <div class="scan-reticle">
             <span></span><span></span><span></span><span></span>
-            <strong>Place la carte ici</strong>
+            <strong id="scanOverlayText">Place la carte ici</strong>
           </div>
         </div>
       </section>
 
       <section class="panel scan-side-panel">
         <div class="panel-heading">
-          <h3>Identification</h3>
+          <h3>Analyse live</h3>
           <span id="scanConfidence">Prêt</span>
         </div>
-        <div class="scan-search">
-          <input id="scanQuery" placeholder="Nom ou numéro lu, ex: Charizard ex 125/197">
-          <button id="analyzeScan" class="primary-button" type="button">Identifier</button>
-        </div>
         <div id="scanResult" class="scan-result empty-state">
-          Cadre la carte, capture, puis identifie-la. Aucun résultat n’est choisi au hasard.
+          La caméra démarre automatiquement. Garde la carte stable dans le rectangle.
         </div>
       </section>
     </div>
   </dialog>
 
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
