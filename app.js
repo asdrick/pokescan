@@ -1,124 +1,171 @@
 const API_BASE = "https://api.pokemontcg.io/v2";
 let cameraStream = null;
 let currentDetectedCard = null;
+let scanActiveLoop = false;
 
-// Initialisation de l'état local
-let state = JSON.parse(localStorage.getItem("pokescan-premium-state")) || { cards: [] };
+// Chargement initial sécurisé de l'état local original
+let state = JSON.parse(localStorage.getItem("pokescan-collection-v3")) || { cards: [], wishlist: [], graded: [] };
 
 function saveState() {
-  localStorage.setItem("pokescan-premium-state", JSON.stringify(state));
-  renderCollection();
+  localStorage.setItem("pokescan-collection-v3", JSON.stringify(state));
+  renderAllData();
 }
 
-// ROUTING DE NAVIGATION SIMPLE
-document.querySelectorAll(".nav-item").forEach(button => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".nav-item").forEach(btn => btn.classList.remove("active"));
-    document.querySelectorAll(".view-section").forEach(view => view.classList.remove("active"));
+// ROUTER MULTI-VUES (BUREAU + NAVIGATION MOBILE)
+const navButtons = document.querySelectorAll(".nav-item, .bottom-nav-item");
+navButtons.forEach(btn => {
+  btn.addEventListener("click", () => {
+    const targetView = btn.dataset.view;
     
-    button.classList.add("active");
-    const viewId = `view-${button.dataset.view}`;
-    document.getElementById(viewId).classList.add("active");
+    // Mettre à jour l'état visuel de tous les boutons correspondants
+    navButtons.forEach(b => b.classList.toggle("active", b.dataset.view === targetView));
+    
+    // Basculer les sections visibles
+    document.querySelectorAll(".view-section").forEach(sec => {
+      sec.classList.toggle("active", sec.id === `view-${targetView}`);
+    });
   });
 });
 
-// ACTIONS CAMERA ET SCAN
+// ACTIONS CAMERA ET OPTIMISATION MOBILE FLUIDE
 const centralScanBtn = document.getElementById("central-scan-btn");
 const scanDialog = document.getElementById("scanDialog");
 const closeScanDialog = document.getElementById("closeScanDialog");
 const cameraVideo = document.getElementById("cameraVideo");
 const captureCanvas = document.getElementById("captureCanvas");
+const scanOverlayStatus = document.getElementById("scanOverlayStatus");
 
-centralScanBtn.addEventListener("click", openSmartScanner);
-closeScanDialog.addEventListener("click", closeSmartScanner);
+centralScanBtn.addEventListener("click", openOptimizedScanner);
+closeScanDialog.addEventListener("click", closeOptimizedScanner);
 
-async function openSmartScanner() {
+async function openOptimizedScanner() {
   scanDialog.showModal();
+  scanOverlayStatus.innerText = "Démarrage caméra...";
+  
   try {
+    // Profils de flux fluides optimisés pour éviter le sur-échantillonnage mobile inutile
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { 
+        facingMode: "environment",
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 }
+      },
       audio: false
     });
     cameraVideo.srcObject = cameraStream;
     cameraVideo.play();
     
-    // Démarre l'analyse en boucle toutes les 2.5 secondes pour laisser le temps de faire la mise au point
-    setTimeout(analyzeSnapshotLoop, 2000);
+    scanActiveLoop = true;
+    // Laisse 1,5 seconde au téléphone pour faire la mise au point matérielle
+    setTimeout(processFluidOCRFrame, 1500);
   } catch (err) {
-    alert("Impossible d'accéder à la caméra arrière : " + err.message);
-    closeSmartScanner();
+    alert("Accès caméra refusé ou indisponible : " + err.message);
+    closeOptimizedScanner();
   }
 }
 
-function closeSmartScanner() {
+function closeOptimizedScanner() {
+  scanActiveLoop = false;
   if (cameraStream) {
     cameraStream.getTracks().forEach(track => track.stop());
   }
   scanDialog.close();
 }
 
-// BOUCLE INTELLIGENTE D'ANALYSE D'IMAGE (OCR GRATUIT)
-async function analyzeSnapshotLoop() {
-  if (!scanDialog.open) return;
+// CROP DE ZONE ULTRA CIBLÉ : Évite de faire ramer le CPU en analysant des gros fichiers
+async function processFluidOCRFrame() {
+  if (!scanActiveLoop || !scanDialog.open) return;
 
   const ctx = captureCanvas.getContext("2d");
-  captureCanvas.width = cameraVideo.videoWidth;
-  captureCanvas.height = cameraVideo.videoHeight;
   
-  // On prend une photo du flux vidéo
-  ctx.drawImage(cameraVideo, 0, 0, captureCanvas.width, captureCanvas.height);
-  
-  // Exécution de l'OCR sur la zone basse du flux vidéo (où se situent généralement les numéros ex: 151/198)
-  const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.85);
-  
-  try {
-    const result = await Tesseract.recognize(dataUrl, 'eng');
-    const text = result.data.text;
-    
-    // Recherche d'un pattern type numéro de carte (ex: 142/165 ou 089/102)
-    const match = text.match(/(\d+)\s*\/\s*(\d+)/);
-    
-    if (match) {
-      const cardNumber = match[1];
-      const totalCards = match[2];
-      
-      // Appel de l'API Pokémon TCG gratuite avec les filtres requis
-      const response = await fetch(`${API_BASE}/cards?q=number:${cardNumber}`);
-      const apiData = await response.json();
-      
-      if (apiData.data && apiData.data.length > 0) {
-        // Tri intelligent pour ramener la carte la plus probable
-        currentDetectedCard = apiData.data[0];
-        closeSmartScanner();
-        showCardResult(currentDetectedCard);
-        return; 
-      }
-    }
-  } catch (e) {
-    console.log("Analyse en cours...", e);
+  // Tailles réelles de la vidéo reçue par le capteur
+  const vWidth = cameraVideo.videoWidth;
+  const vHeight = cameraVideo.videoHeight;
+
+  if (vWidth === 0 || vHeight === 0) {
+    if (scanActiveLoop) setTimeout(processFluidOCRFrame, 500);
+    return;
   }
 
-  // Si rien n'est trouvé, on réessaye au prochain cycle
-  if (scanDialog.open) {
-    setTimeout(analyzeSnapshotLoop, 2500);
+  // Définir un micro-canevas pour la zone du numéro de série (bas de la carte)
+  // Taille réduite à 320x80 pixels pour un calcul instantané sans lag
+  captureCanvas.width = 320;
+  captureCanvas.height = 80;
+
+  // Calcul mathématique pour découper uniquement la zone ocr-target-box de l'overlay
+  const cropX = Math.floor(vWidth * 0.35);
+  const cropY = Math.floor(vHeight * 0.62);
+  const cropWidth = Math.floor(vWidth * 0.30);
+  const cropHeight = Math.floor(vHeight * 0.12);
+
+  // Dessine uniquement le fragment extrait sur notre canvas miniature
+  ctx.drawImage(cameraVideo, cropX, cropY, cropWidth, cropHeight, 0, 0, 320, 80);
+  
+  // Optionnel : conversion en niveaux de gris basique pour booster l'OCR
+  const imgData = ctx.getImageData(0, 0, 320, 80);
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    let brightness = 0.34 * imgData.data[i] + 0.5 * imgData.data[i + 1] + 0.16 * imgData.data[i + 2];
+    imgData.data[i] = brightness;
+    imgData.data[i+1] = brightness;
+    imgData.data[i+2] = brightness;
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const croppedDataUrl = captureCanvas.toDataURL("image/jpeg", 0.8);
+
+  try {
+    scanOverlayStatus.innerText = "Lecture...";
+    // Appel OCR rapide léger
+    const result = await Tesseract.recognize(croppedDataUrl, 'eng');
+    const text = result.data.text || "";
+    
+    // Regex pour isoler le numéro de série imprimé (Exemple: 145/192 ou 021/078)
+    const foundPattern = text.match(/(\d+)\s*[\/\s]\s*(\d+)/);
+    
+    if (foundPattern) {
+      const numberPart = foundPattern[1];
+      scanOverlayStatus.innerText = `Trouvé : ${numberPart}! Recherche TCG...`;
+      
+      // Appel direct de l'API sans aucune interaction textuelle requise
+      const apiResponse = await fetch(`${API_BASE}/cards?q=number:${numberPart}`);
+      const json = await apiResponse.json();
+      
+      if (json.data && json.data.length > 0) {
+        currentDetectedCard = json.data[0];
+        closeOptimizedScanner();
+        displayCardResult(currentDetectedCard);
+        return; // Cas victorieux, on stoppe la boucle
+      }
+    }
+  } catch (ocrError) {
+    console.log("Analyse en arrière-plan...", ocrError);
+  }
+
+  // Si rien n'est trouvé, relancer le cycle léger après un court délai fluide (1,8s)
+  if (scanActiveLoop) {
+    scanOverlayStatus.innerText = "Ajustement...";
+    setTimeout(processFluidOCRFrame, 1800);
   }
 }
 
-// POPUP DE CONFIRMATION DES INFOS CARTE ET PRIX
-function showCardResult(card) {
+// APPARENCE POPUP DE RÉSULTAT DU MARCHÉ GRATUIT
+function displayCardResult(card) {
   const modal = document.getElementById("cardModal");
   const body = document.getElementById("modalBody");
   
-  const marketPrice = card.tcgplayer?.prices?.holofoil?.market || card.tcgplayer?.prices?.normal?.market || "0.99";
+  // Extraction intelligente des indicateurs de prix réels
+  const price = card.tcgplayer?.prices?.holofoil?.market || card.tcgplayer?.prices?.normal?.market || card.cardmarket?.prices?.trendPrice || "0.50";
 
   body.innerHTML = `
     <div style="text-align: center;">
-      <img src="${card.images.small}" style="max-width: 180px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 14px;">
-      <h3 style="margin: 0; font-size: 20px;">${card.name}</h3>
-      <p style="color: var(--muted); margin: 4px 0 12px 0;">Série : ${card.set.name} (${card.number}/${card.set.printedTotal})</p>
-      <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--success); padding: 12px; border-radius: 12px; display: inline-block;">
-        <span style="font-size: 12px; color: var(--muted); display: block; text-transform: uppercase;">Estimation Marché</span>
-        <strong style="font-size: 22px; color: var(--success);">${marketPrice} €</strong>
+      <img src="${card.images.small}" style="max-width: 160px; border-radius: 10px; box-shadow: 0 10px 20px rgba(0,0,0,0.5); margin-bottom: 12px; will-change: transform;">
+      <h3 style="margin: 0 0 4px 0; font-size: 18px; color:#fff;">${card.name}</h3>
+      <p style="color: var(--muted); font-size:13px; margin: 0 0 16px 0;">${card.set.name} (${card.number}/${card.set.printedTotal})</p>
+      
+      <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid var(--success); padding: 10px 20px; border-radius: 12px; display: inline-block;">
+        <span style="font-size: 11px; color: var(--muted); display: block; text-transform: uppercase;">Prix Moyen Constaté</span>
+        <strong style="font-size: 20px; color: var(--success);">${price} €</strong>
       </div>
     </div>
   `;
@@ -126,10 +173,25 @@ function showCardResult(card) {
   modal.showModal();
 }
 
-// INTERACTIONS BOUTONS DE SAUVEGARDE
+// CONSERVATION ET SAUVEGARDE LOCALE DES ENTRÉES SCOUTÉES
 document.getElementById("saveCardBtn").addEventListener("click", () => {
   if (currentDetectedCard) {
-    state.cards.unshift(currentDetectedCard);
+    // Injection des données au format d'origine pour ne pas briser le reste de votre application
+    const transformedCard = {
+      id: `id-${Date.now()}`,
+      name: currentDetectedCard.name,
+      set: currentDetectedCard.set.name,
+      number: currentDetectedCard.number,
+      rarity: currentDetectedCard.rarity || "Commune",
+      condition: "Near Mint",
+      quantity: 1,
+      price: currentDetectedCard.tcgplayer?.prices?.holofoil?.market || currentDetectedCard.tcgplayer?.prices?.normal?.market || 0.50,
+      currency: "EUR",
+      image: currentDetectedCard.images.small,
+      addedAt: Date.now()
+    };
+    
+    state.cards.unshift(transformedCard);
     saveState();
   }
   document.getElementById("cardModal").close();
@@ -139,33 +201,59 @@ document.getElementById("closeModal").addEventListener("click", () => {
   document.getElementById("cardModal").close();
 });
 
-// AFFICHAGE DE LA COLLECTION CLASSEUR
-function renderCollection() {
-  const grid = document.getElementById("collection-grid");
-  const count = document.getElementById("collection-count");
+// METTRE A JOUR TOUTES LES VUES ET COMPTEURS VISUELS DE L'APP
+function renderAllData() {
+  // 1. Mise à jour des mini-compteurs de l'accueil
+  const totalValue = state.cards.reduce((sum, c) => sum + (Number(c.price) * Number(c.quantity)), 0);
+  document.getElementById("dash-count").innerText = state.cards.length;
+  document.getElementById("dash-value").innerText = `${totalValue.toFixed(2)} €`;
   
-  count.innerText = `${state.cards.length} carte${state.cards.length > 1 ? 's' : ''}`;
-  grid.innerHTML = "";
+  // 2. Remplissage de la grille du classeur (Collection)
+  const collectionGrid = document.getElementById("collectionGrid");
+  const collectionCount = document.getElementById("collectionCount");
+  collectionCount.innerText = `${state.cards.length} carte${state.cards.length > 1 ? 's' : ''}`;
+  collectionGrid.innerHTML = "";
   
   if (state.cards.length === 0) {
-    grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--muted); padding: 40px 0;">Aucune carte dans votre classeur pour l'instant.</div>`;
-    return;
+    collectionGrid.innerHTML = `<div style="grid-column: 1/-1; color: var(--muted); text-align:center; padding: 30px 0;">Votre classeur est vide pour le moment.</div>`;
+  } else {
+    state.cards.forEach(card => {
+      const cardEl = document.createElement("div");
+      cardEl.className = "collection-card";
+      cardEl.innerHTML = `
+        <img src="${card.image}" alt="${card.name}" loading="lazy">
+        <h4>${card.name}</h4>
+        <p>${Number(card.price).toFixed(2)} €</p>
+      `;
+      collectionGrid.appendChild(cardEl);
+    });
   }
-  
-  state.cards.forEach(card => {
-    const marketPrice = card.tcgplayer?.prices?.holofoil?.market || card.tcgplayer?.prices?.normal?.market || "0.99";
-    const item = document.createElement("div");
-    item.className = "collection-card";
-    item.innerHTML = `
-      <img src="${card.images.small}" alt="${card.name}">
-      <h4>${card.name}</h4>
-      <p>${marketPrice} €</p>
-    `;
-    grid.appendChild(item);
-  });
+
+  // 3. Remplissage automatique fictif ou statique des séries de cartes à des fins de complétion
+  const setProgress = document.getElementById("setProgress");
+  setProgress.innerHTML = `
+    <div class="set-row-card">
+      <div style="display:flex; justify-content:space-between; font-size:14px;">
+        <strong>Écarlate et Violet — 151</strong>
+        <span>${state.cards.filter(c => c.set.includes("151")).length} / 165</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" style="width: ${Math.min(100, (state.cards.filter(c => c.set.includes("151")).length / 165) * 100)}%"></div>
+      </div>
+    </div>
+    <div class="set-row-card">
+      <div style="display:flex; justify-content:space-between; font-size:14px;">
+        <strong>Destinées de Paldea</strong>
+        <span>${state.cards.filter(c => c.set.includes("Paldea")).length} / 91</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" style="width: ${Math.min(100, (state.cards.filter(c => c.set.includes("Paldea")).length / 91) * 100)}%"></div>
+      </div>
+    </div>
+  `;
 }
 
-// Chargement initial au démarrage
-window.onload = () => {
-  renderCollection();
-};
+// Lancement au chargement complet du script
+window.addEventListener("DOMContentLoaded", () => {
+  renderAllData();
+});
