@@ -7,9 +7,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="PokéScan">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>PokéScan — Scanner Mobile Pro</title>
+  <title>PokéScan Collection Pro</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
   <link rel="stylesheet" href="./styles.css">
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
@@ -17,117 +18,222 @@
   <div class="app-shell">
     <aside class="sidebar" aria-label="Navigation principale">
       <div class="brand">
-        <div class="brand-mark"></div>
+        <div class="brand-mark" aria-hidden="true"></div>
         <div>
           <strong>PokéScan Pro</strong>
-          <span>Vision Engine v3.5</span>
+          <span id="ocrStatusEngine">Moteur IA : Initialisation...</span>
         </div>
       </div>
+
       <nav class="nav">
         <button class="nav-item active" data-view="dashboard" type="button"><span>⌂</span>Accueil</button>
-        <button class="nav-item" data-view="database" type="button"><span>⌕</span>Base de données</button>
-        <button class="nav-item" data-view="collection" type="button"><span>▦</span>Ma Collection</button>
+        <button class="nav-item" data-open-scanner type="button"><span>◉</span>Scanner Live</button>
+        <button class="nav-item" data-view="database" type="button"><span>⌕</span>Base cartes</button>
+        <button class="nav-item" data-view="collection" type="button"><span>▦</span>Collection</button>
         <button class="nav-item" data-view="sets" type="button"><span>◎</span>Séries</button>
+        <button class="nav-item" data-view="wishlist" type="button"><span>☆</span>Wishlist</button>
+        <button class="nav-item" data-view="graded" type="button"><span>◇</span>Gradées</button>
       </nav>
-      <div class="sidebar-footer">
-        <div class="api-status online" id="apiStatus"><span class="pulse"></span> Mode Gratuit Illimité</div>
+
+      <div class="api-status offline" id="apiStatus">
+        <span class="pulse"></span>
+        Initialisation système
+      </div>
+
+      <div class="sidebar-actions">
+        <button id="themeToggle" class="ghost-button" type="button">Mode clair</button>
+        <button id="printExport" class="ghost-button" type="button">Export PDF</button>
       </div>
     </aside>
 
     <main class="content">
-      <section id="view-dashboard" class="view-section active">
-        <div class="hero-scanner-container">
-          <div class="hero-text">
-            <h2>Scanner une carte</h2>
-            <p>Ouvrez l'appareil photo, alignez le bas de la carte et laissez l'IA récupérer instantanément les informations et prix réels du marché.</p>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Moteur de reconnaissance ultra-rapide</p>
+          <h1 id="viewTitle">Tableau de bord</h1>
+        </div>
+        <div class="top-actions">
+          <label class="search-box">
+            <span>⌕</span>
+            <input id="globalSearch" type="search" placeholder="Rechercher dans ta collection">
+          </label>
+          <button class="primary-button" data-open-scanner type="button">Scanner une carte</button>
+        </div>
+      </header>
+
+      <section id="dashboard" class="view active-view">
+        <div class="hero-panel">
+          <div class="hero-copy">
+            <p class="eyebrow">Technologie de scan stabilisée</p>
+            <h2>Identifiez vos cartes Pokémon instantanément, sans souffrir des tremblements.</h2>
+            <p>Notre nouvel algorithme isole le numéro de série en bas de la carte et applique un traitement numérique anti-flou en temps réel pour garantir la bonne carte à chaque scan.</p>
           </div>
-          
-          <button class="main-scan-trigger" id="central-scan-btn" type="button">
-            <div class="pulse-ring"></div>
-            <div class="btn-core">
-              <span class="scan-icon">◉</span>
-              <span class="scan-text">LANCER LE SCAN</span>
+          <div class="holo-card" aria-hidden="true">
+            <div class="holo-inner"></div>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric"><span>Total cartes</span><strong id="metricTotal">0</strong></article>
+          <article class="metric"><span>Valeur estimée</span><strong id="metricValue">0 €</strong></article>
+          <article class="metric"><span>Doublons</span><strong id="metricDuplicates">0</strong></article>
+          <article class="metric"><span>Séries API</span><strong id="metricSets">0</strong></article>
+        </div>
+
+        <div class="two-column">
+          <section class="panel">
+            <div class="panel-heading">
+              <h3>Signal valeur</h3>
+              <span>Collection locale</span>
             </div>
-          </button>
+            <div id="valueChart" class="bar-chart"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-heading">
+              <h3>Dernières cartes</h3>
+              <span id="recentCount">0 entrée</span>
+            </div>
+            <div id="recentCards" class="compact-list"></div>
+          </section>
+        </div>
+      </section>
 
-          <div class="mini-stats-row">
-            <div class="mini-stat"><span id="dash-count">0</span> <span>cartes</span></div>
-            <div class="mini-stat"><span id="dash-value">0.00 €</span> <span>valeur</span></div>
+      <section id="scanner" class="view">
+        <section class="panel scanner-launch">
+          <div>
+            <p class="eyebrow">Traitement Haute Fidélité</p>
+            <h2>Prêt pour le scan à la volée.</h2>
+            <p class="card-meta">Le traitement d'image dynamique élimine le bruit numérique provoqué par les mouvements de votre main.</p>
           </div>
+          <button class="primary-button" data-open-scanner type="button">Ouvrir l'objectif caméra</button>
+        </section>
+      </section>
+
+      <section id="database" class="view">
+        <section class="panel">
+          <div class="panel-heading">
+            <h3>Base de données Pokémon TCG</h3>
+            <span id="dbCount">Recherche API</span>
+          </div>
+          <div class="database-tools">
+            <input id="apiSearch" placeholder="Nom, série ou numéro">
+            <select id="apiSetFilter"><option value="">Toutes les séries</option></select>
+            <button id="apiSearchButton" class="primary-button" type="button">Chercher</button>
+            <button id="loadMoreCards" class="ghost-button" type="button">Plus de résultats</button>
+          </div>
+        </section>
+        <div id="apiCardsGrid" class="card-grid"></div>
+      </section>
+
+      <section id="collection" class="view">
+        <div class="panel">
+          <div class="panel-heading">
+            <h3>Ajouter une carte manuellement</h3>
+            <span>Formulaire de secours</span>
+          </div>
+          <form id="cardForm" class="card-form">
+            <input name="name" placeholder="Nom de la carte" required>
+            <input name="set" placeholder="Série / Extension" required>
+            <input name="number" placeholder="Numéro (ex: 151/165)" required>
+            <select name="rarity"><option>Common</option><option>Uncommon</option><option>Rare</option><option>Holo Rare</option><option>Secret Rare</option></select>
+            <select name="condition"><option>Gem Mint</option><option>Mint</option><option selected>Near Mint</option><option>Excellent</option><option>Good</option><option>Played</option><option>Poor</option></select>
+            <input name="quantity" type="number" min="1" value="1" aria-label="Quantité">
+            <input name="price" type="number" min="0" step="0.01" placeholder="Prix d'achat ou estimé €">
+            <input name="location" placeholder="Emplacement (Classeur A, Boîte...)">
+            <input name="rating" type="number" min="1" max="10" value="8" aria-label="Note">
+            <button class="primary-button" type="submit">Sauvegarder dans mon classeur</button>
+          </form>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <h3>Ma collection personnelle</h3>
+            <span id="collectionCount">0 carte</span>
+          </div>
+          <div id="collectionGrid" class="card-grid"></div>
         </div>
       </section>
 
-      <section id="view-database" class="view-section hidden">
-        <div class="view-header">
-          <h2>Base de données TCG</h2>
+      <section id="sets" class="view">
+        <div class="panel">
+          <div class="panel-heading">
+            <h3>Taux de complétion des Extensions</h3>
+            <span id="setsCount">Chargement API...</span>
+          </div>
+          <div id="setProgress" class="set-grid"></div>
         </div>
-        <div id="apiCardsGrid" class="cards-grid"></div>
       </section>
 
-      <section id="view-collection" class="view-section hidden">
-        <div class="view-header">
-          <h2>Ma Collection</h2>
-          <div id="collectionCount" class="counter-pill">0 carte</div>
+      <section id="wishlist" class="view">
+        <div class="panel">
+          <div class="panel-heading"><h3>Ma Liste de Souhaits</h3><span>Priorités et budgets</span></div>
+          <form id="wishlistForm" class="wishlist-form">
+            <input name="name" placeholder="Nom de la carte recherchée" required>
+            <input name="budget" type="number" min="0" placeholder="Budget maximum (€)">
+            <select name="priority"><option>Haute</option><option>Moyenne</option><option>Basse</option></select>
+            <button class="primary-button" type="submit">Ajouter à la wishlist</button>
+          </form>
+          <div id="wishlistList" class="compact-list"></div>
         </div>
-        <div id="collectionGrid" class="cards-grid"></div>
       </section>
 
-      <section id="view-sets" class="view-section hidden">
-        <div class="view-header">
-          <h2>Séries & Sets</h2>
+      <section id="graded" class="view">
+        <div class="panel">
+          <div class="panel-heading"><h3>Mon Coffre de Cartes Gradées</h3><span>Certifications d'authenticité</span></div>
+          <form id="gradedForm" class="wishlist-form">
+            <input name="name" placeholder="Nom complet de la carte" required>
+            <select name="company"><option>PSA</option><option>BGS</option><option>CGC</option><option>SGS</option></select>
+            <input name="grade" type="number" min="1" max="10" step="0.5" placeholder="Note (ex: 10)" required>
+            <input name="cert" placeholder="Numéro de certificat">
+            <input name="value" type="number" min="0" step="0.01" placeholder="Valeur marchande actuelle €">
+            <button class="primary-button" type="submit">Enregistrer la carte gradée</button>
+          </form>
+          <div id="gradedList" class="compact-list"></div>
         </div>
-        <div id="setProgress" class="sets-grid"></div>
       </section>
     </main>
-
-    <nav class="bottom-nav">
-      <button class="bottom-nav-item active" data-view="dashboard" type="button">
-        <span class="b-icon">⌂</span><span class="b-text">Accueil</span>
-      </button>
-      <button class="bottom-nav-item" data-view="database" type="button">
-        <span class="b-icon">⌕</span><span class="b-text">Base</span>
-      </button>
-      <button class="bottom-nav-item" data-view="collection" type="button">
-        <span class="b-icon">▦</span><span class="b-text">Classeur</span>
-      </button>
-      <button class="bottom-nav-item" data-view="sets" type="button">
-        <span class="b-icon">◎</span><span class="b-text">Séries</span>
-      </button>
-    </nav>
   </div>
 
-  <dialog id="scanDialog" class="fullscreen-scan-dialog">
-    <div class="scan-overlay-header">
-      <button id="closeScanDialog" class="close-scan-btn" type="button">✕ Fermer</button>
-      <div id="scanOverlayStatus" class="scan-status-indicator">Analyse active...</div>
+  <dialog id="cardModal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Fiche descriptive</h3>
+      <button id="closeModal" class="mini-button" type="button">Fermer</button>
     </div>
-    
-    <div class="camera-viewport-wrapper">
-      <video id="cameraVideo" playsinline muted></video>
-      <canvas id="captureCanvas" class="hidden"></canvas>
-      
-      <div class="hologram-reticle">
-        <div class="corner top-left"></div>
-        <div class="corner top-right"></div>
-        <div class="corner bottom-left"></div>
-        <div class="corner bottom-right"></div>
-        <div class="laser-line"></div>
-        <div class="reticle-hint">Positionnez le numéro (ex: 162/198) ici</div>
-        <div class="ocr-target-box"></div>
-      </div>
-    </div>
+    <div id="modalBody"></div>
   </dialog>
 
-  <dialog id="cardModal" class="result-modal">
-    <div class="modal-content-wrapper">
-      <div id="modalBody"></div>
-      <div class="modal-actions">
-        <button id="saveCardBtn" class="action-btn primary-action">✓ Ajouter au classeur</button>
-        <button id="closeModal" class="action-btn secondary-action">Fermer</button>
-      </div>
+  <dialog id="scanDialog" class="scan-dialog">
+    <div class="modal-head">
+      <h3>Scanner Intelligent Pro</h3>
+      <button id="closeScanDialog" class="mini-button" type="button">Fermer</button>
+    </div>
+    <div class="scanner-grid">
+      <section class="scanner-stage">
+        <div class="camera-frame">
+          <video id="cameraVideo" playsinline muted></video>
+          <canvas id="captureCanvas" class="hidden"></canvas>
+          <img id="scanPhoto" class="hidden" alt="Capture gelée">
+          
+          <div class="scan-reticle">
+            <span></span><span></span><span></span><span></span>
+            <strong id="scanOverlayText">Positionnez le bas de la carte ici</strong>
+          </div>
+        </div>
+        <div class="scanner-manual-fallback">
+          <input type="text" id="scannerQuickFallbackField" placeholder="Numéro illisible ? Tapez ici (ex: 151/165)">
+          <button type="button" id="scannerQuickFallbackBtn">OK</button>
+        </div>
+      </section>
+
+      <section class="panel scan-side-panel">
+        <div class="panel-heading">
+          <h3>Flux d'analyse en direct</h3>
+          <span id="scanConfidence" class="status-badge">Ajustement automatique...</span>
+        </div>
+        <div id="scanResult" class="scan-result empty-state">
+          Présentez le bas de la carte bien horizontalement face à l'objectif. L'IA compense vos mouvements de main.
+        </div>
+      </section>
     </div>
   </dialog>
-
-  <script src="./app.js"></script>
 </body>
 </html>
