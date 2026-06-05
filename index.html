@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#d92435">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="PokéCollection">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>PokéCollection Free</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navigation principale">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div>
+          <strong>PokéCollection</strong>
+          <span>Free</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard" title="Tableau de bord">
+          <span class="icon">⌂</span><span>Accueil</span>
+        </button>
+        <button class="nav-item" data-view="scanner" title="Scanner">
+          <span class="icon">◉</span><span>Scanner</span>
+        </button>
+        <button class="nav-item" data-view="collection" title="Collection">
+          <span class="icon">▦</span><span>Collection</span>
+        </button>
+        <button class="nav-item" data-view="sets" title="Séries">
+          <span class="icon">◎</span><span>Séries</span>
+        </button>
+        <button class="nav-item" data-view="wishlist" title="Wishlist">
+          <span class="icon">☆</span><span>Wishlist</span>
+        </button>
+        <button class="nav-item" data-view="graded" title="Cartes gradées">
+          <span class="icon">◇</span><span>Gradées</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-actions">
+        <button id="themeToggle" class="ghost-button" type="button">Mode sombre</button>
+        <button id="printExport" class="ghost-button" type="button">Export PDF</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Application locale</p>
+          <h1 id="viewTitle">Tableau de bord</h1>
+        </div>
+        <div class="top-actions">
+          <label class="search-box">
+            <span>⌕</span>
+            <input id="globalSearch" type="search" placeholder="Rechercher une carte">
+          </label>
+          <button class="primary-button" data-view-jump="scanner" type="button">Scanner</button>
+        </div>
+      </header>
+
+      <section id="dashboard" class="view active-view">
+        <div class="hero-panel">
+          <div class="hero-copy">
+            <p class="eyebrow">Collection active</p>
+            <h2>Suivi, valeur et progression en un seul écran.</h2>
+            <p>Ajoutez vos cartes, notez leur état, surveillez vos séries et préparez vos échanges.</p>
+          </div>
+          <div class="hero-card-stack" aria-hidden="true">
+            <div class="sample-card card-red"></div>
+            <div class="sample-card card-blue"></div>
+            <div class="sample-card card-gold"></div>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric">
+            <span>Total cartes</span>
+            <strong id="metricTotal">0</strong>
+          </article>
+          <article class="metric">
+            <span>Valeur estimée</span>
+            <strong id="metricValue">0 €</strong>
+          </article>
+          <article class="metric">
+            <span>Doublons</span>
+            <strong id="metricDuplicates">0</strong>
+          </article>
+          <article class="metric">
+            <span>Progression moyenne</span>
+            <strong id="metricProgress">0%</strong>
+          </article>
+        </div>
+
+        <div class="two-column">
+          <section class="panel">
+            <div class="panel-heading">
+              <h3>Évolution de valeur</h3>
+              <span>30 derniers jours</span>
+            </div>
+            <div id="valueChart" class="bar-chart" aria-label="Graphique de valeur"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-heading">
+              <h3>Dernières cartes</h3>
+              <span id="recentCount">0 entrée</span>
+            </div>
+            <div id="recentCards" class="compact-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="scanner" class="view">
+        <div class="scanner-layout">
+          <section class="panel scanner-panel">
+            <div class="panel-heading">
+              <h3>Scanner intelligent</h3>
+              <span>Vision + OCR simulés</span>
+            </div>
+            <label class="dropzone" for="cardImage">
+              <input id="cardImage" type="file" accept="image/*">
+              <span class="scan-icon">◉</span>
+              <strong>Importer une photo de carte</strong>
+              <small>La reconnaissance est simulée pour cette première version locale.</small>
+            </label>
+            <div id="scanPreview" class="scan-preview hidden"></div>
+            <button id="analyzeScan" class="primary-button wide" type="button">Analyser la carte</button>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h3>Résultat</h3>
+              <span id="scanConfidence">En attente</span>
+            </div>
+            <div id="scanResult" class="scan-result empty-state">
+              Importez une image puis lancez l’analyse.
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="collection" class="view">
+        <div class="panel">
+          <div class="panel-heading">
+            <h3>Ajouter une carte</h3>
+            <span>Données utilisateur</span>
+          </div>
+          <form id="cardForm" class="card-form">
+            <input name="name" placeholder="Nom de la carte" required>
+            <input name="set" placeholder="Série" required>
+            <input name="number" placeholder="Numéro" required>
+            <select name="rarity">
+              <option>Common</option>
+              <option>Uncommon</option>
+              <option>Rare</option>
+              <option>Holo Rare</option>
+              <option>Secret Rare</option>
+            </select>
+            <select name="condition">
+              <option>Gem Mint</option>
+              <option>Mint</option>
+              <option selected>Near Mint</option>
+              <option>Excellent</option>
+              <option>Good</option>
+              <option>Played</option>
+              <option>Poor</option>
+            </select>
+            <input name="quantity" type="number" min="1" value="1" aria-label="Quantité">
+            <input name="price" type="number" min="0" step="0.1" placeholder="Prix €">
+            <input name="location" placeholder="Classeur / page">
+            <input name="rating" type="number" min="1" max="10" value="8" aria-label="Note personnelle">
+            <button class="primary-button" type="submit">Ajouter</button>
+          </form>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <h3>Ma collection</h3>
+            <span id="collectionCount">0 carte</span>
+          </div>
+          <div id="collectionGrid" class="card-grid"></div>
+        </div>
+      </section>
+
+      <section id="sets" class="view">
+        <div id="setProgress" class="set-grid"></div>
+      </section>
+
+      <section id="wishlist" class="view">
+        <div class="panel">
+          <div class="panel-heading">
+            <h3>Wishlist</h3>
+            <span>Priorités et budgets</span>
+          </div>
+          <form id="wishlistForm" class="wishlist-form">
+            <input name="name" placeholder="Carte recherchée" required>
+            <input name="budget" type="number" min="0" placeholder="Budget €">
+            <select name="priority">
+              <option>Haute</option>
+              <option>Moyenne</option>
+              <option>Basse</option>
+            </select>
+            <button class="primary-button" type="submit">Ajouter</button>
+          </form>
+          <div id="wishlistList" class="compact-list"></div>
+        </div>
+      </section>
+
+      <section id="graded" class="view">
+        <div class="panel">
+          <div class="panel-heading">
+            <h3>Cartes gradées</h3>
+            <span>PSA, BGS, CGC</span>
+          </div>
+          <form id="gradedForm" class="wishlist-form">
+            <input name="name" placeholder="Nom de la carte" required>
+            <select name="company">
+              <option>PSA</option>
+              <option>BGS</option>
+              <option>CGC</option>
+            </select>
+            <input name="grade" type="number" min="1" max="10" step="0.5" placeholder="Note" required>
+            <input name="cert" placeholder="Certification">
+            <input name="value" type="number" min="0" placeholder="Valeur €">
+            <button class="primary-button" type="submit">Ajouter</button>
+          </form>
+          <div id="gradedList" class="compact-list"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
