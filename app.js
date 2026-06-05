@@ -1,12 +1,6 @@
 const API_BASE = "https://api.pokemontcg.io/v2";
 const PAGE_SIZE = 24;
 
-const fallbackCards = [
-  { name: "Charizard ex", set: "Obsidian Flames", number: "125/197", rarity: "Double Rare", condition: "Near Mint", quantity: 1, price: 12, currency: "EUR", image: "", location: "Classeur principal", rating: 9 },
-  { name: "Pikachu", set: "Scarlet & Violet 151", number: "025/165", rarity: "Common", condition: "Mint", quantity: 3, price: 3, currency: "EUR", image: "", location: "Page 2", rating: 8 },
-  { name: "Mew ex", set: "Paldean Fates", number: "216/091", rarity: "Special Illustration Rare", condition: "Gem Mint", quantity: 1, price: 88, currency: "EUR", image: "", location: "Investissement", rating: 10 }
-];
-
 const state = loadState();
 let apiSets = [];
 let apiCards = [];
@@ -26,17 +20,12 @@ const viewTitles = {
 };
 
 function loadState() {
-  const saved = localStorage.getItem("pokescan-collection-v2");
+  const saved = localStorage.getItem("pokescan-collection-v3");
   if (saved) return JSON.parse(saved);
   return {
-    cards: fallbackCards.map((card, index) => ({ ...card, id: createId(), addedAt: Date.now() - index * 86400000 })),
-    wishlist: [
-      { id: createId(), name: "Umbreon VMAX", budget: 220, priority: "Haute" },
-      { id: createId(), name: "Lugia V Alternate Art", budget: 140, priority: "Moyenne" }
-    ],
-    graded: [
-      { id: createId(), name: "Mew ex", company: "PSA", grade: 10, cert: "PSA-000124", value: 210 }
-    ],
+    cards: [],
+    wishlist: [],
+    graded: [],
     light: false
   };
 }
@@ -47,7 +36,7 @@ function createId() {
 }
 
 function saveState() {
-  localStorage.setItem("pokescan-collection-v2", JSON.stringify(state));
+  localStorage.setItem("pokescan-collection-v3", JSON.stringify(state));
 }
 
 function money(value, currency = "EUR") {
@@ -325,6 +314,52 @@ function buildCardQuery(search, setId) {
   return parts.join(" ");
 }
 
+function normalizeScanText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9/\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scanTokens(value) {
+  const stop = new Set(["pokemon", "basic", "stage", "evolves", "from", "weakness", "resistance", "retreat", "illus", "hp", "pv"]);
+  return normalizeScanText(value).split(" ").filter(token => token.length > 1 && !stop.has(token));
+}
+
+function scanNumber(value) {
+  return normalizeScanText(value).match(/\b(\d{1,3})\s*\/\s*(\d{1,3})\b/)?.[1] || normalizeScanText(value).match(/\b\d{1,3}\b/)?.[0] || "";
+}
+
+function scanSearchTerms(value) {
+  const tokens = scanTokens(value);
+  const number = scanNumber(value);
+  const terms = [];
+  const joined = tokens.slice(0, 5).join(" ");
+  if (joined) terms.push(joined);
+  if (tokens.length) terms.push(tokens[0]);
+  if (tokens.length > 1) terms.push(tokens.slice(0, 2).join(" "));
+  if (number) terms.push(number);
+  return [...new Set(terms)].slice(0, 4);
+}
+
+function scoreScanCandidate(card, rawText) {
+  const tokens = scanTokens(rawText);
+  const number = scanNumber(rawText);
+  const haystack = normalizeScanText(`${card.name} ${card.set?.name || ""} ${card.number || ""} ${(card.types || []).join(" ")}`);
+  let score = 0;
+  if (number && String(card.number || "").startsWith(number)) score += 42;
+  if (normalizeScanText(card.name) && normalizeScanText(rawText).includes(normalizeScanText(card.name))) score += 44;
+  tokens.forEach(token => {
+    if (haystack.includes(token)) score += token.length > 3 ? 9 : 5;
+  });
+  if ((card.name || "").toLowerCase().includes(" ex") && tokens.includes("ex")) score += 8;
+  if ((card.name || "").toLowerCase().includes("vmax") && tokens.includes("vmax")) score += 10;
+  return Math.min(99, score);
+}
+
 async function searchApiCards(reset = true) {
   const search = document.querySelector("#apiSearch").value;
   const setId = document.querySelector("#apiSetFilter").value;
@@ -353,27 +388,74 @@ async function searchApiCards(reset = true) {
 }
 
 async function identifyScan() {
-  const query = document.querySelector("#scanQuery").value.trim() || "Pikachu";
-  document.querySelector("#scanConfidence").textContent = "Recherche...";
-  document.querySelector("#scanResult").innerHTML = empty("Recherche de correspondances...");
+  const query = document.querySelector("#scanQuery").value.trim();
+  if (!query) {
+    document.querySelector("#scanConfidence").textContent = "Nom requis";
+    document.querySelector("#scanResult").innerHTML = empty("Aucun texte fiable détecté. Écris au moins le nom ou le numéro de la carte, puis relance l’identification.");
+    return;
+  }
+
+  document.querySelector("#scanConfidence").textContent = "Analyse...";
+  document.querySelector("#scanResult").innerHTML = empty("Comparaison avec la base Pokémon TCG...");
   try {
-    const data = await apiGet("/cards", {
-      page: 1,
-      pageSize: 6,
-      q: buildCardQuery(query, ""),
-      orderBy: "-set.releaseDate"
-    });
-    const cards = data.data || [];
+    const searches = scanSearchTerms(query);
+    const results = [];
+    const seen = new Set();
+    for (const term of searches) {
+      const data = await apiGet("/cards", {
+        page: 1,
+        pageSize: 12,
+        q: buildCardQuery(term, ""),
+        orderBy: "-set.releaseDate"
+      });
+      (data.data || []).forEach(card => {
+        if (!seen.has(card.id)) {
+          seen.add(card.id);
+          results.push(card);
+        }
+      });
+    }
+
+    const cards = results
+      .map(card => ({ ...card, scanScore: scoreScanCandidate(card, query) }))
+      .filter(card => card.scanScore > 0)
+      .sort((a, b) => b.scanScore - a.scanScore)
+      .slice(0, 8);
+
     const knownIds = new Set(apiCards.map(card => card.id));
     apiCards = [...cards.filter(card => !knownIds.has(card.id)), ...apiCards];
-    document.querySelector("#scanConfidence").textContent = cards.length ? "Cartes candidates" : "Aucun résultat";
+    document.querySelector("#scanConfidence").textContent = cards.length ? `Meilleur score ${cards[0].scanScore}%` : "Aucun résultat fiable";
     document.querySelector("#scanResult").className = "scan-result";
-    document.querySelector("#scanResult").innerHTML = cards.length ? cards.map(apiCardTile).join("") : empty("Aucune carte trouvée. Essaie avec le nom anglais, ex: Charizard.");
-    if (cards[0]) openCardModal(cards[0], true);
+    document.querySelector("#scanResult").innerHTML = cards.length ? cards.map(scanCandidateTile).join("") : empty("Aucune carte fiable trouvée. Essaie avec le nom anglais exact et le numéro, ex: Charizard ex 125/197.");
+    if (cards.length) openScanResultsModal(cards, query);
   } catch (error) {
     document.querySelector("#scanConfidence").textContent = "API indisponible";
     document.querySelector("#scanResult").innerHTML = empty("L’identification en ligne n’a pas répondu.");
   }
+}
+
+function scanCandidateTile(card) {
+  const price = extractPrice(card);
+  return `
+    <article class="collection-card">
+      <img class="card-img" src="${escapeHtml(card.images?.small || card.images?.large || "")}" alt="${escapeHtml(card.name)}">
+      <div class="card-title">
+        <div>
+          <strong>${escapeHtml(card.name)}</strong>
+          <div class="card-meta">${escapeHtml(card.set?.name || "")} · ${escapeHtml(card.number || "")}</div>
+        </div>
+        <strong>${card.scanScore || 0}%</strong>
+      </div>
+      <div class="price-stack">
+        <div class="price-pill"><span>Prix</span><strong>${price.value ? money(price.value, price.currency) : "N/A"}</strong></div>
+        <div class="price-pill"><span>Source</span><strong>${escapeHtml(price.source)}</strong></div>
+      </div>
+      <div class="card-actions">
+        <button class="mini-button" data-api-open="${escapeHtml(card.id)}" type="button">Détails</button>
+        <button class="mini-button" data-api-add="${escapeHtml(card.id)}" type="button">Ajouter</button>
+      </div>
+    </article>
+  `;
 }
 
 async function startCamera() {
@@ -393,6 +475,15 @@ async function startCamera() {
     document.querySelector("#scanConfidence").textContent = "Caméra bloquée";
     document.querySelector("#scanResult").innerHTML = empty("Sur iPhone, ouvre l’app en HTTPS avec Safari et accepte l’accès caméra.");
   }
+}
+
+function stopCamera() {
+  if (!cameraStream) return;
+  cameraStream.getTracks().forEach(track => track.stop());
+  cameraStream = null;
+  const video = document.querySelector("#cameraVideo");
+  video.pause();
+  video.srcObject = null;
 }
 
 async function captureScan() {
@@ -456,6 +547,42 @@ function openCardModal(card, fromScan = false) {
   document.querySelector("#cardModal").showModal();
 }
 
+function openScanResultsModal(cards, rawQuery) {
+  const best = cards[0];
+  document.querySelector("#modalTitle").textContent = "Résultat du scan";
+  document.querySelector("#modalBody").innerHTML = `
+    <div class="modal-card">
+      <div>
+        ${lastCapturedImage ? `<img src="${escapeHtml(lastCapturedImage)}" alt="Photo scannée">` : `<div class="collection-art"></div>`}
+        <p class="card-meta">Texte analysé : ${escapeHtml(rawQuery)}</p>
+      </div>
+      <div>
+        <h2>${escapeHtml(best.name)}</h2>
+        <p class="card-meta">Meilleure correspondance · score ${best.scanScore}%</p>
+        <div class="compact-list">
+          ${cards.map(card => {
+            const price = extractPrice(card);
+            return `
+              <div class="compact-row">
+                <img class="thumb" src="${escapeHtml(card.images?.small || card.images?.large || "")}" alt="">
+                <div>
+                  <strong>${escapeHtml(card.name)}</strong>
+                  <div class="compact-meta">${escapeHtml(card.set?.name || "")} · ${escapeHtml(card.number || "")} · score ${card.scanScore}%</div>
+                </div>
+                <div class="card-actions">
+                  <strong>${price.value ? money(price.value, price.currency) : "N/A"}</strong>
+                  <button class="mini-button" data-api-add="${escapeHtml(card.id)}" type="button">Ajouter</button>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+  document.querySelector("#cardModal").showModal();
+}
+
 function addApiCardById(id) {
   const card = apiCards.find(item => item.id === id);
   if (!card) return;
@@ -466,6 +593,10 @@ function addApiCardById(id) {
 
 document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => switchView(button.dataset.view)));
 document.querySelectorAll("[data-view-jump]").forEach(button => button.addEventListener("click", () => switchView(button.dataset.viewJump)));
+document.querySelectorAll("[data-open-scanner]").forEach(button => button.addEventListener("click", () => {
+  document.querySelector("#scanDialog").showModal();
+  document.querySelector("#scanConfidence").textContent = "Prêt";
+}));
 
 document.querySelector("#themeToggle").addEventListener("click", () => {
   state.light = !state.light;
@@ -483,6 +614,11 @@ document.querySelector("#startCamera").addEventListener("click", startCamera);
 document.querySelector("#captureScan").addEventListener("click", captureScan);
 document.querySelector("#analyzeScan").addEventListener("click", identifyScan);
 document.querySelector("#closeModal").addEventListener("click", () => document.querySelector("#cardModal").close());
+document.querySelector("#closeScanDialog").addEventListener("click", () => {
+  stopCamera();
+  document.querySelector("#scanDialog").close();
+});
+document.querySelector("#scanDialog").addEventListener("close", stopCamera);
 
 document.querySelector("#cardImage").addEventListener("change", async event => {
   const file = event.target.files[0];
